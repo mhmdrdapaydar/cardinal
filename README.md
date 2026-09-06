@@ -20,17 +20,18 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260906-anime-2`
+## Release `20260906-anime-3`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
 ### Behaviour changes — read this before deploying
 
-Earlier releases in this series were presentation-only. **This one is not.** `lib/Game.php` was changed in three places, on request, to match what the Telegram bots already do. No formula, reward, price, cooldown, drop rate or progression value was touched; nothing was made cheaper, faster or more profitable. `api.php`, `lib/Rules.php`, `lib/DemoGame.php` and `config.php` remain byte-for-byte unchanged.
+Earlier releases in this series were presentation-only. **This one is not.** `lib/Game.php` was changed in two places, on request. No formula, reward, price, cooldown, drop rate or progression value was touched; nothing was made cheaper, faster or more profitable. `api.php`, `lib/Rules.php`, `lib/DemoGame.php` and `config.php` remain byte-for-byte unchanged.
 
-1. **`getInventory()` no longer requires the city.** This is a read-only query. `equip()`, `unequip()` and `getEquipment()` never had a location guard, so gating only this read made the equipment panel unusable in the wild: the panel loads equipment and inventory together and rendered its error state whenever either call was refused. Equipment now behaves outside the city exactly as it does inside.
-2. **`dropItem()` and `dropMini()` no longer require the city.** Discarding only deletes the player's own rows and grants nothing. The bots allow it anywhere.
-3. **New `drop-crafted` action.** The web build could craft and upgrade items but never destroy one, so a backpack full of crafted gear could not be cleared. A non-tradeable crafted item previously had no row action at all. The new action deletes only the caller's own instance, refuses if the item is currently equipped, and refunds nothing. The interface asks for an explicit confirmation because the deletion is permanent.
+1. **`getInventory()` no longer requires the city.** This is a read-only query. `equip()`, `unequip()` and `getEquipment()` never had a location guard, so gating only this read is what made the equipment panel unusable in the wild: the panel loads equipment and inventory together and rendered its error state whenever either call was refused. Equipping itself was never blocked. The equipment panel now behaves outside the city exactly as it does inside.
+2. **New `drop-crafted` action.** The web build could craft and upgrade items but never destroy one, so a backpack full of crafted gear could not be cleared, and a non-tradeable crafted item had no row action at all. The new action deletes only the caller's own instance, refuses while the item is equipped, requires the safe zone like every other discard, and refunds nothing. The interface asks for an explicit confirmation because the deletion is permanent.
+
+Discarding remains a **safe-zone action**: `dropItem()`, `dropMini()` and `dropCrafted()` all call `requireCity()`, and the backpack panel is still city-only, so the interface never offers a discard the server would refuse.
 
 If you want any of these to stay restricted on a particular server, re-add the corresponding `$this->requireCity($player);` call — each removal is marked with a comment explaining why it went.
 
@@ -40,6 +41,7 @@ Presentation only, and unchanged in intent from the previous releases.
 
 What changed in the rendered world:
 
+- **Hard-edged specular.** A PBR highlight is a soft blob; the anime convention is a sheen that snaps on. Thresholding the specular the engine already computes gives that without needing the light vector in the hook.
 - **Ink contour.** The very edge of each primitive turns nearly perpendicular to the eye, so darkening that sliver reads as a drawn outline. This avoids an inverted-hull pass, which would have meant restructuring the scene graph. Floors are excluded.
 - **Cel shading.** Every `MeshStandardMaterial` is hooked through `onBeforeCompile`, a single global entry point that leaves meshes, material assignments and scene structure untouched. The direct diffuse irradiance is divided out of the albedo, quantised into three bands and multiplied back, so the terminator falls in the same place on every object no matter how light or dark its texture is. Band hardness is surface-aware: crisp anime steps on characters, props and walls, much softer on the ground, where a hard step reads as a spotlight and erases the cobblestone relief.
 - **Anime rim light.** A Fresnel term added to emissive traces silhouettes in cool cyan. It is computed from the *geometric* normal rather than the normal-mapped one: the cobblestone map alone tilts the shading normal by roughly 55 degrees, which previously lit the entire plaza and made the rim crawl with surface detail instead of following the outline. Horizontal surfaces are masked out entirely, so floors never glow.
@@ -70,7 +72,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260906-anime-2.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260906-anime-3.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

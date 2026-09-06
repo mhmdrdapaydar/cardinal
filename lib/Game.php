@@ -1827,10 +1827,9 @@ final class CardinalGame
         $itemId = self::assertInt($itemInput, 'شناسه آیتم');
         $quantity = self::assertInt($quantityInput, 'تعداد');
         return $this->transaction(function () use ($playerId, $itemId, $quantity): array {
-            // No location guard: the Telegram bots let a player discard from
-            // anywhere, and this only removes the player's own rows. It grants
-            // nothing and alters no formula.
-            $this->preparePlayer($playerId, true);
+            $player = $this->preparePlayer($playerId, true);
+            // Discarding stays a safe-zone action, as originally shipped.
+            $this->requireCity($player);
             if ($itemId === 4) throw new GameException('این آیتم قابل دور انداختن نیست.');
             if ($this->one('SELECT player_id FROM equipment WHERE player_id = ? AND (weapon_id = ? OR armor_id = ? OR pet_id = ?)', [$playerId, $itemId, $itemId, $itemId])) throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
             $item = $this->one('SELECT item_name FROM items WHERE item_id = ?', [$itemId]);
@@ -1846,7 +1845,8 @@ final class CardinalGame
         $miniItemId = self::assertInt($miniInput, 'شناسه ماده اولیه');
         $quantity = self::assertInt($quantityInput, 'تعداد');
         return $this->transaction(function () use ($playerId, $miniItemId, $quantity): array {
-            $this->preparePlayer($playerId, true);
+            $player = $this->preparePlayer($playerId, true);
+            $this->requireCity($player);
             $mini = $this->one('SELECT name FROM mini_items WHERE mini_item_id = ?', [$miniItemId]);
             if (!$mini) throw new GameException('ماده اولیه پیدا نشد.');
             $this->deductMini($playerId, $miniItemId, $quantity);
@@ -1857,9 +1857,9 @@ final class CardinalGame
     /**
      * Discard a crafted instance permanently.
      *
-     * The web build could craft and upgrade items but never destroy one, while
-     * the bots already could, so a full backpack could not be cleared here.
-     * Deletes only the caller's own row and refunds nothing.
+     * The web build could craft and upgrade items but never destroy one, so a
+     * full backpack could not be cleared here. Safe-zone only, like every
+     * other discard. Deletes the caller's own row and refunds nothing.
      *
      * @return array<string, mixed>
      */
@@ -1867,7 +1867,8 @@ final class CardinalGame
     {
         $instanceId = self::assertInt($instanceInput, 'شناسه آیتم ساخته‌شده');
         return $this->transaction(function () use ($playerId, $instanceId): array {
-            $this->preparePlayer($playerId, true);
+            $player = $this->preparePlayer($playerId, true);
+            $this->requireCity($player);
             $crafted = $this->one(
                 'SELECT pci.instance_id, pci.upgrade_level, ci.item_name
                  FROM player_crafted_items pci

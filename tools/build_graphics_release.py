@@ -98,6 +98,8 @@ CEL_RIM_START = "0.40"
 CEL_RIM_END = "0.84"
 CEL_INK_START = "0.88"      # only the last sliver before the silhouette
 CEL_INK_DARKNESS = "0.24"   # how dark the drawn contour goes
+CEL_SPEC_THRESHOLD = "0.05" # where the hard sheen snaps on
+CEL_SPEC_GAIN = "2.3"       # how bright it gets once it does
 
 CEL_GLSL = (
     '"#include <aomap_fragment>\\n'
@@ -132,6 +134,10 @@ CEL_GLSL = (
     'float celLit = smoothstep( 0.04, 0.42, celLum );\\n'
     f'reflectedLight.indirectDiffuse *= mix( {CEL_SHADOW_TINT}, {CEL_LIGHT_TINT}, celLit );\\n'
 
+    'float celSpecLum = dot( reflectedLight.directSpecular, vec3( 0.2126, 0.7152, 0.0722 ) );\\n'
+    f'float celSpecStep = smoothstep( {CEL_SPEC_THRESHOLD}, {CEL_SPEC_THRESHOLD} * 2.4, celSpecLum );\\n'
+    f'reflectedLight.directSpecular = mix( reflectedLight.directSpecular * 0.3,'
+    f' reflectedLight.directSpecular * {CEL_SPEC_GAIN}, celSpecStep );\\n'
     'float celFacing = 1.0 - saturate( dot( celGeoNormal, geometryViewDir ) );\\n'
     # Ink contour. On a model built from spheres, cylinders and cones the
     # very edge of each primitive turns almost perpendicular to the eye, so
@@ -213,19 +219,11 @@ def world_patches(*, marker: str, helper: str, quality: str) -> list[tuple[str, 
 # --------------------------------------------------------------------------
 
 # Identical string literals in both the modern and the legacy entry bundle.
-SHARED_UI_PATCHES = [
-    (
-        "backpack panel reachable outside the city",
-        '["inventory","shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
-        '["shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
-    ),
-    (
-        "backpack entry in the wild sidebar",
-        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},{panel:"party"',
-        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},'
-        '{panel:"inventory",icon:"\U0001f392",label:"\u0645\u0648\u062c\u0648\u062f\u06cc"},{panel:"party"',
-    ),
-]
+# Discarding is a safe-zone action, so the backpack panel stays city-only and
+# the wild sidebar is left exactly as shipped. The equipment panel still works
+# outside the city, because that only needed the inventory *read* to be
+# permitted -- not the panel itself.
+SHARED_UI_PATCHES: list[tuple[str, str, str]] = []
 
 DROP = "\u062f\u0648\u0631 \u0627\u0646\u062f\u0627\u062e\u062a\u0646"                     # "discard"
 DROP_MATERIAL = DROP + " \u0645\u0627\u062f\u0647 \u0627\u0648\u0644\u06cc\u0647"           # "discard material"
