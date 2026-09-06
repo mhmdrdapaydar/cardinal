@@ -299,6 +299,64 @@ LEGACY_UI_PATCHES = [
 
 LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palette:a,city:!0,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),b.jsx(Gv,{palette:a,city:!0,quality:n})'), ('mount place detail in the wild scene', 'b.jsx(Gv,{palette:a,city:!1,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),b.jsx(Gv,{palette:a,city:!1,quality:n})')]
 
+# --------------------------------------------------------------------------
+# Avatar detail (tools/cardinal-avatar.js).
+#
+# Replaces the hair and face, and layers an outfit over the existing torso.
+# The limb groups the walk cycle drives, the body capsule, the ground shadow,
+# the label height and the point light are all left alone, so the animation
+# and the avatar's footprint are unchanged.
+# --------------------------------------------------------------------------
+AVATAR_SOURCE = (ROOT / "tools" / "cardinal-avatar.js").read_text(encoding="utf-8")
+
+
+def avatar_installer(jsx: str, react: str, use_frame: str) -> str:
+    return AVATAR_SOURCE + f"\nvar cardinalAvatar=cardinalMakeAvatar({jsx},{react},{use_frame});\n"
+
+
+AVATAR_MODERN = [
+    (
+        "avatar: layered hair",
+        'f.jsxs("mesh",{castShadow:!0,position:[0,2.21,.025],scale:[1.12,.52,1.09],children:[f.jsx("sphereGeometry",{args:[.33,18,12]}),f.jsx("meshStandardMaterial",{color:d,roughness:.83})]}),'
+        '[-.14,0,.14].map((x,_)=>f.jsxs("mesh",{castShadow:!0,position:[x,2.22+(_===1?.05:0),-.19],rotation:[.22,0,(_-1)*.18],scale:[.14,.2,.11],children:[f.jsx("sphereGeometry",{args:[1,9,7]}),f.jsx("meshStandardMaterial",{color:d,roughness:.8})]},x))',
+        'f.jsx(cardinalAvatar.Hair,{hair:d,visual:u})',
+    ),
+    (
+        "avatar: face",
+        'f.jsxs("mesh",{position:[-.11,1.99,-.322],children:[f.jsx("sphereGeometry",{args:[.048,8,8]}),f.jsx("meshBasicMaterial",{color:u.glow})]}),'
+        'f.jsxs("mesh",{position:[.11,1.99,-.322],children:[f.jsx("sphereGeometry",{args:[.048,8,8]}),f.jsx("meshBasicMaterial",{color:u.glow})]}),'
+        'f.jsxs("mesh",{position:[0,1.9,-.33],scale:[.06,.09,.05],children:[f.jsx("sphereGeometry",{args:[1,8,6]}),f.jsx("meshStandardMaterial",{color:"#bd7f6e",roughness:.7})]})',
+        'f.jsx(cardinalAvatar.Face,{visual:u,hair:d})',
+    ),
+    (
+        "avatar: slimmer torso",
+        'position:[0,1.13,0],scale:[.67,1.18,.55]',
+        'position:[0,1.14,0],scale:[.6,1.24,.5]',
+    ),
+]
+
+AVATAR_LEGACY = [
+    (
+        "avatar: layered hair",
+        'b.jsxs("mesh",{castShadow:!0,position:[0,2.21,.025],scale:[1.12,.52,1.09],children:[b.jsx("sphereGeometry",{args:[.33,18,12]}),b.jsx("meshStandardMaterial",{color:d,roughness:.83})]}),'
+        '[-.14,0,.14].map(function(e,t){return b.jsxs("mesh",{castShadow:!0,position:[e,2.22+(1===t?.05:0),-.19],rotation:[.22,0,.18*(t-1)],scale:[.14,.2,.11],children:[b.jsx("sphereGeometry",{args:[1,9,7]}),b.jsx("meshStandardMaterial",{color:d,roughness:.8})]},e)})',
+        'b.jsx(cardinalAvatar.Hair,{hair:d,visual:c})',
+    ),
+    (
+        "avatar: face",
+        'b.jsxs("mesh",{position:[-.11,1.99,-.322],children:[b.jsx("sphereGeometry",{args:[.048,8,8]}),b.jsx("meshBasicMaterial",{color:c.glow})]}),'
+        'b.jsxs("mesh",{position:[.11,1.99,-.322],children:[b.jsx("sphereGeometry",{args:[.048,8,8]}),b.jsx("meshBasicMaterial",{color:c.glow})]}),'
+        'b.jsxs("mesh",{position:[0,1.9,-.33],scale:[.06,.09,.05],children:[b.jsx("sphereGeometry",{args:[1,8,6]}),b.jsx("meshStandardMaterial",{color:"#bd7f6e",roughness:.7})]})',
+        'b.jsx(cardinalAvatar.Face,{visual:c,hair:d})',
+    ),
+    (
+        "avatar: slimmer torso",
+        'position:[0,1.13,0],scale:[.67,1.18,.55]',
+        'position:[0,1.14,0],scale:[.6,1.24,.5]',
+    ),
+]
+
+
 WALL_MODERN = [('city wall: tiers, chord width, gate opening', 'const t=Wt(Yo,1.4,1.1,e),n=Wt(Zo,1.4,1.1,e,en),i=e==="low"?5:10,s=e==="low"?3:6;', 'const t=Wt(Yo,1.4,1.1,e),n=Wt(Zo,1.4,1.1,e,en),i=e==="low"?6:e==="balanced"?8:10,s=e==="low"?4:e==="balanced"?9:12,cw=2*35.5*Math.sin(Math.PI/i)+.5,gs=Math.round(i/4-.5);'), ('city wall: tangential orientation', 'const u=l/i*Math.PI*2,h=Math.cos(u)*35.5,d=Math.sin(u)*35.5;return f.jsxs("group",{position:[h,1.65,d],rotation:[0,-u,0],', 'if(l===gs)return null;const u=(l+.5)/i*Math.PI*2,h=Math.cos(u)*35.5,d=Math.sin(u)*35.5;return f.jsxs("group",{position:[h,1.9,d],rotation:[0,-u-Math.PI/2,0],'), ('city wall: slab spans the full chord', 'f.jsx("boxGeometry",{args:[8.2,3.25,1.05]})', 'f.jsx("boxGeometry",{args:[cw,3.8,1.15]})'), ('city wall: coping course', 'f.jsxs("mesh",{position:[0,1.97,.58],children:[f.jsx("boxGeometry",{args:[7.85,.26,.15]})', 'f.jsxs("mesh",{position:[0,2.05,.62],children:[f.jsx("boxGeometry",{args:[cw*.99,.3,.22]})'), ('city wall: battlements spread over the chord', 'f.jsxs("mesh",{position:[-3.28+g*(6.56/Math.max(1,s-1)),2.05,0],children:[f.jsx("boxGeometry",{args:[.65,.85,1.25]})', 'f.jsxs("mesh",{position:[-cw*.44+g*(cw*.88/Math.max(1,s-1)),2.42,0],children:[f.jsx("boxGeometry",{args:[.72,.98,1.35]})'), ('city wall: banner height', 'l%2===0&&f.jsx(Bs,{position:[0,3.05,.1]', 'l%2===0&&f.jsx(Bs,{position:[0,3.4,.1]')]
 
 WALL_LEGACY = [('city wall: tiers, chord width, gate opening', 'i="low"===t?5:10,a="low"===t?3:6;', 'i="low"===t?6:"balanced"===t?8:10,a="low"===t?4:"balanced"===t?9:12,cw=2*35.5*Math.sin(Math.PI/i)+.5,gs=Math.round(i/4-.5);'), ('city wall: tangential orientation', 'function(e,o){var s=o/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.65,u],rotation:[0,-s,0],', 'function(e,o){if(o===gs)return null;var s=(o+.5)/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.9,u],rotation:[0,-s-Math.PI/2,0],'), ('city wall: slab spans the full chord', 'b.jsx("boxGeometry",{args:[8.2,3.25,1.05]})', 'b.jsx("boxGeometry",{args:[cw,3.8,1.15]})'), ('city wall: coping course', 'b.jsxs("mesh",{position:[0,1.97,.58],children:[b.jsx("boxGeometry",{args:[7.85,.26,.15]})', 'b.jsxs("mesh",{position:[0,2.05,.62],children:[b.jsx("boxGeometry",{args:[cw*.99,.3,.22]})'), ('city wall: battlements spread over the chord', 'b.jsxs("mesh",{position:[t*(6.56/Math.max(1,a-1))-3.28,2.05,0],children:[b.jsx("boxGeometry",{args:[.65,.85,1.25]})', 'b.jsxs("mesh",{position:[t*(cw*.88/Math.max(1,a-1))-cw*.44,2.42,0],children:[b.jsx("boxGeometry",{args:[.72,.98,1.35]})'), ('city wall: banner height', 'o%2==0&&b.jsx(yg,{position:[0,3.05,.1]', 'o%2==0&&b.jsx(yg,{position:[0,3.4,.1]')]
@@ -307,11 +365,11 @@ MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palet
 
 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + [
+    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
-            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}{places_installer("f", "H", "kt")}'
+            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}{places_installer("f", "H", "kt")}{avatar_installer("f", "H", "kt")}'
             'function c_(r){var u=cardinalWorldHiTexture()?r.replace(/\\.jpg$/i,"-hi.jpg"):r;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
         ),
@@ -376,11 +434,11 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
-            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}{places_installer("b", "_", "Qp")}'
+            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}{places_installer("b", "_", "Qp")}{avatar_installer("b", "_", "Qp")}'
             'function mv(e){var u=cardinalWorldHiTexture()?e.replace(/\\.jpg$/i,"-hi.jpg"):e;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
         ),
