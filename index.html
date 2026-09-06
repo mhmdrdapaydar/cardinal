@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#071426" />
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="description" content="نسخه وب سه‌بعدی کاردینال — سرور ۵" />
+    <title>کاردینال | سرور ۵</title>
+    <style>
+      html, body, #root { width: 100%; min-height: 100%; margin: 0; }
+      body { background: #071426; color: #eaf3ff; font-family: Tahoma, "Segoe UI", Arial, sans-serif; }
+      .startup { min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: radial-gradient(circle at 48% 35%, #294b82 0, #111f39 36%, #071426 75%); text-align: center; }
+      .startup__card { width: min(390px, 100%); padding: 30px 24px; border: 1px solid rgba(191, 214, 255, .2); border-radius: 22px; background: rgba(12, 25, 47, .84); box-shadow: 0 20px 55px rgba(0, 0, 0, .35); }
+      .startup__mark { display: grid; width: 50px; height: 50px; place-items: center; margin: 0 auto 15px; border: 1px solid #f6d171; border-radius: 14px 14px 21px 14px; background: linear-gradient(135deg, #f6d171, #a66b2c); color: #162035; font: bold 32px Georgia, serif; transform: rotate(-7deg); }
+      .startup h1 { margin: 0 0 8px; font-size: 23px; }.startup p { margin: 0; color: #bdcde5; font-size: 13px; line-height: 1.9; }
+      .startup small { display: block; margin-top: 13px; color: #8394af; font-size: 11px; }
+      .startup__retry { display: inline-block; margin-top: 14px; padding: 8px 12px; border: 1px solid rgba(246, 209, 113, .42); border-radius: 9px; color: #ffe1a0; font: 700 11px Tahoma, "Segoe UI", Arial, sans-serif; text-decoration: none; }
+      .startup__retry:hover { background: rgba(246, 197, 104, .13); }
+      .startup__spin { width: 20px; height: 20px; margin: 16px auto 0; border: 2px solid rgba(255,255,255,.23); border-top-color: #f6d171; border-radius: 50%; animation: spin .8s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <script type="module" crossorigin src="./assets/index-ItmggkR1.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dnm512So.css">
+    <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
+    <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
+  </head>
+  <body>
+    <div id="root">
+      <main class="startup" aria-live="polite">
+        <section class="startup__card">
+          <div class="startup__mark">C</div>
+          <h1>کاردینال · سرور ۵</h1>
+          <p>در حال آماده‌سازی دروازه‌های جهان کاردینال…</p>
+          <div class="startup__spin" aria-hidden="true"></div>
+          <small id="startup-status">در حال بارگذاری رابط بازی…</small>
+          <a class="startup__retry" href="./?reload=1">بارگذاری دوباره</a>
+        </section>
+      </main>
+    </div>
+    <noscript>
+      <main class="startup"><section class="startup__card"><div class="startup__mark">C</div><h1>جاوااسکریپت غیرفعال است</h1><p>برای اجرای نسخه وب کاردینال، جاوااسکریپت مرورگر را فعال کنید.</p></section></main>
+    </noscript>
+    <script>
+      // This stays independent of the React bundle. If a host/browser cache
+      // points at a removed hashed asset, first try the release's stable
+      // recovery entry. This avoids leaving the player on an endless startup
+      // screen when a host has an incomplete/old hashed-asset cache.
+      window.setTimeout(function () {
+        var root = document.getElementById('root');
+        var status = document.getElementById('startup-status');
+        if (!root || !root.querySelector('.startup') || window.__cardinalRecoveryStarted) return;
+        window.__cardinalRecoveryStarted = true;
+        if (status) status.textContent = 'در حال بازیابی رابط بازی…';
+        var recoveryVersion = Date.now();
+        var recoveryCss = document.createElement('link');
+        recoveryCss.rel = 'stylesheet';
+        recoveryCss.href = './assets/cardinal-current.css?recovery=' + recoveryVersion;
+        document.head.appendChild(recoveryCss);
+        var recovery = document.createElement('script');
+        recovery.type = 'module';
+        recovery.src = './assets/cardinal-current-main.js?recovery=' + recoveryVersion;
+        recovery.onerror = function () {
+          if (status) status.textContent = 'رابط بازی بارگذاری نشد؛ پوشه assets و فایل .htaccess را با نسخه جدید جایگزین کنید.';
+        };
+        document.head.appendChild(recovery);
+      }, 10000);
+    </script>
+    <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+    <script nomodule crossorigin id="vite-legacy-polyfill" src="./assets/polyfills-legacy-CkLuAc6e.js"></script>
+    <script nomodule crossorigin id="vite-legacy-entry" data-src="./assets/index-legacy-DfcBKWBd.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+  </body>
+</html>

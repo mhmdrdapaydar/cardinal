@@ -1,1 +1,89 @@
-# cardinal
+# Cardinal V — PHP upload package
+
+This is the web-only **server 5** release. It runs on ordinary static/PHP hosting: no Node.js, npm, Socket.IO process, cron worker, database migration, or daemon is required after upload.
+
+## What is included
+
+- responsive React/Three.js build with a cinematic, original virtual-fantasy 3D city/wild realm: textured terrain with local normal maps, lit cobblestone plazas, animated aurora ribbons, a skyborne citadel silhouette and aether-horizon spires, luminous fountain crown, citadel walls and gatehouse, themed homes, visual city residents, market/forge/shrine landmarks, street furniture, particles, class-coloured avatar energy, and optimized material assets; no external game/IP asset is copied into the package;
+- a local neon gateway login/registration experience with depth layers, animated portal rings, light-grid/aurora treatment, glass panels, and responsive no-WebGL CSS effects; Android retains a real scrollable account form and reduced-motion users receive the static version;
+- actual 360° free-look: drag the world on desktop, single-finger swipe the viewport on Android, use wheel zoom on desktop, and use the on-screen reset control to restore the default camera; movement remains relative to the camera direction;
+- directional avatar movement: the character turns to face the actual travel direction for every input, including Back, instead of moonwalking;
+- local rendered-world collision: the avatar is kept out of city walls, buildings, fountain/market/street props, wild trees, rocks, ruins, landmark footprints, water, and the map boundary; this presentation layer does not alter game/database rules;
+- adaptive graphics controls: a reduced initial desktop pixel budget, bounded device-pixel ratio, high/balanced/low tiers, and instanced decoration; after three sustained sub-22-FPS samples, only a desktop high-tier renderer remounts at balanced quality. Android keeps its existing detected tier and touch controls; game state and database rules never change;
+- Android-safe movement input: 48px controls, a dedicated hit-test layer, non-interactive closed sidebar, and notifications that never intercept a direction press;
+- resilient 3D boot: local texture URLs carry a release marker to bypass a cached historical asset failure; the blue transition now has a readable loading card, a one-tap low-graphics retry, and an automatic low-graphics Canvas restart if a real rendered frame does not arrive;
+- bot-managed Noble badge access: when a badge is inactive, the website shows the player's C_ID and directs them to the official Cardinal bot on Telegram, Rubika, or Bale; there is no Noble checkout, invoice button, or payment gateway in the website;
+- `api.php`, PHP sessions, PDO/MySQL data adapter, and the existing game rules;
+- all web gameplay routes used by the interface: account, inventory/equipment, shop, hunt/dungeon/boss/PvP, quests, party/social/guild, crafting, notifications, leaderboards, and the Rubika seasonal-card achievements board; Noble requests remain bot-managed and expose no web payment flow;
+- only the legacy-compatible idempotent `INSERT IGNORE` registration for `servers.server_id = 5`; the package never creates, changes, or migrates tables;
+- no Node, Socket.IO, source maps, database dump, or database credential.
+
+Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
+
+## Requirements
+
+- Apache/LiteSpeed or equivalent static hosting with PHP **7.4+** (PHP 8.1+ recommended);
+- PHP extensions: `pdo_mysql`, `json`, `mbstring`, and `openssl`;
+- MySQL/MariaDB access to the **existing** Cardinal database;
+- the database user needs access to the existing tables already used by the bots.
+
+## Upload
+
+1. Extract this ZIP into the intended web directory, e.g. `public_html/` or `public_html/cardinal/`.
+2. Open the directory URL. The landing page works in isolated preview mode before a production database is configured.
+3. For production, create `/home/CPANEL_USER/cardinal-private.php` **outside** `public_html` using `private-config.example.php` as the template. Alternatively define the server environment variables:
+
+   ```text
+   CARDINAL_DB_HOST
+   CARDINAL_DB_PORT
+   CARDINAL_DB_NAME
+   CARDINAL_DB_USER
+   CARDINAL_DB_PASSWORD
+   ```
+
+4. Do **not** upload `cardinal-private.php`, do not put it into this ZIP, and do not paste it into browser-facing JavaScript.
+5. Reload the website. `api.php?route=health` will report `demoMode: false` when it has opened the production connection.
+
+### Critical: update procedure for Apache/LiteSpeed startup repair
+
+If this package replaces an older deployment, extract it with **overwrite enabled** into the exact directory served by the site. You must replace all three of these items together:
+
+- the hidden root file **`.htaccess`**;
+- `index.html`;
+- the complete `assets/` directory, including files named `cardinal-current-*.js` and `cardinal-current.css`.
+
+In cPanel **File Manager → Settings**, enable **Show Hidden Files (dotfiles)** before extracting or uploading. Confirm the new `.htaccess` is in the site's root, beside `index.html` and `api.php`—not in a nested ZIP folder. Its compatibility rules deliberately rewrite only *missing* old hashed assets; a previous rule could redirect an existing current JavaScript asset to a deleted bundle and leave the startup card visible forever.
+
+This release also has an independent recovery loader. If a stale HTML page asks for a removed bundle, it tries the stable current entry automatically after roughly 10 seconds. However, `?reload=1` and clearing browser cache cannot repair an old server-side `.htaccess`; replacing the hidden file and the full asset directory is required.
+
+The adapter searches several parent directories for `/home/CPANEL_USER/cardinal-private.php`, so it also works when this site is extracted in a subdirectory. Environment variables take priority.
+
+Example private file (replace all placeholders only on the host):
+
+```php
+<?php
+return [
+    'db_host' => 'localhost',
+    'db_port' => '3306',
+    'db_name' => 'YOUR_EXISTING_CARDINAL_DATABASE',
+    'db_user' => 'YOUR_DATABASE_USER',
+    'db_password' => 'YOUR_DATABASE_PASSWORD',
+];
+```
+
+## Safety notes
+
+- Do not use a real credential in `config.php`, `.htaccess`, frontend files, or a ZIP archive. `.htaccess` cannot make a copied backup/archive secret safe.
+- The browser never connects directly to MySQL. PHP owns the PDO connection and all mutations run inside database transactions.
+- Cookies are `HttpOnly`, `SameSite=Lax`, and scoped to the extracted directory. Each account has exactly one active web session: a later successful login atomically replaces the former session, which is removed on its next heartbeat or API request.
+- The one-session lease is a locked, opaque, 12-hour server-side record outside `public_html`; it does not add or modify any database column/table. A logout from the old browser can never clear the newer browser's lease.
+- If the site gives HTTP 500, select a PHP version with the extensions above and inspect the hosting error log. API errors intentionally never reveal database credentials or DSNs.
+
+## Quick checks after deployment
+
+- `/api.php?route=health` should return JSON with `ok: true`.
+- In production it should show `demoMode: false`.
+- Create a test avatar or sign in with a pre-existing saved account. On Android, the four directional buttons remain above world decorations and respond to both pointer and touch events.
+- Confirm the existing server 5 row is present in `servers`; `INSERT IGNORE` makes repeated requests safe.
+
+No credentials used during development are contained in this archive.

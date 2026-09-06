@@ -1,0 +1,61 @@
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # index.html must be revalidated after an upload. It points to content-hashed
+  # Vite assets, so a proxy-held old HTML page would otherwise leave users on
+  # the startup fallback after old files are removed.
+  <FilesMatch "^index\.html$">
+    Header always set Cache-Control "no-store, max-age=0, must-revalidate"
+    Header always set Pragma "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|jpg|jpeg|png|webp)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+# Compatibility bridge for a cached index.html from an earlier upload.
+#
+# IMPORTANT: only a filename that is no longer present may be bridged. The
+# previous rules rewrote *current* content-hashed JS files to removed bundle
+# names, which left the startup screen running forever on Apache hosts.
+# The stable aliases below are refreshed with each release, so old HTML can
+# recover without ever hijacking a current asset request.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/index-legacy-[A-Za-z0-9_-]+\.js$ assets/cardinal-current-legacy.js [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/index-(?!legacy-)[A-Za-z0-9_-]+\.js$ assets/cardinal-current-main.js [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/polyfills-legacy-[A-Za-z0-9_-]+\.js$ assets/cardinal-current-polyfills.js [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/WorldScene-legacy-[A-Za-z0-9_-]+\.js$ assets/cardinal-current-world-legacy.js [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/WorldScene-(?!legacy-)[A-Za-z0-9_-]+\.js$ assets/cardinal-current-world.js [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^assets/index-[A-Za-z0-9_-]+\.css$ assets/cardinal-current.css [L]
+</IfModule>
+
+# Configuration and source helpers are executed only through api.php, never
+# served as files. This is defense in depth; production credentials belong
+# outside public_html in cardinal-private.php.
+<FilesMatch "^(config\.php|private-config\.example\.php)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
