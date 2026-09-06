@@ -47,6 +47,14 @@ DirectoryIndex index.html
   RewriteRule ^assets/index-[A-Za-z0-9_-]+\.css$ assets/cardinal-current.css [L]
 </IfModule>
 
+# tools/ holds the build-time graphics pipeline (texture generator, release
+# builder, local preview server). It is never needed at runtime and does not
+# have to be uploaded at all; if it is present, it must not be reachable.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^tools(/|$) - [F,L]
+</IfModule>
+
 # Configuration and source helpers are executed only through api.php, never
 # served as files. This is defense in depth; production credentials belong
 # outside public_html in cardinal-private.php.
