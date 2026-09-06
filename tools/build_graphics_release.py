@@ -62,7 +62,89 @@ ALIASES = {
     "cardinal-current.css": STYLES,
 }
 
+# Texture cache marker. Bump this ONLY when the jpg files themselves change:
+# it is appended to every texture URL, so raising it forces every client to
+# re-download ~3 MB of maps.
 RELEASE = "20260906-world-graphics-2"
+
+# Package label, used for the upload archive filename and the docs. Safe to
+# bump on every release; it costs nothing.
+PACKAGE = "20260906-anime-1"
+
+# --------------------------------------------------------------------------
+# Cel shading.
+#
+# Injected into every MeshStandardMaterial through `onBeforeCompile`, which is
+# a single global hook -- no mesh, material assignment or scene structure is
+# touched. The base Material derives its program cache key from
+# `onBeforeCompile.toString()`, so all standard materials still share one
+# compiled program.
+#
+# Two anime staples:
+#   1. The direct diffuse irradiance is divided out of the albedo, quantised
+#      into bands, and multiplied back. Quantising irradiance rather than
+#      final colour keeps the terminator in the same place on every object
+#      regardless of how light or dark its texture is.
+#   2. A Fresnel rim light along silhouettes, added to emissive so it survives
+#      shadowing.
+# --------------------------------------------------------------------------
+CEL_BANDS = "3.0"        # number of light steps
+CEL_HARDNESS = "0.88"    # 0 = smooth as before, 1 = hard steps
+CEL_RIM_COLOR = "vec3( 0.42, 0.72, 1.0 )"
+CEL_RIM_STRENGTH = "0.34"
+CEL_RIM_START = "0.48"
+CEL_RIM_END = "0.99"
+
+CEL_GLSL = (
+    '"#include <aomap_fragment>\\n'
+    # Silhouette work must use the GEOMETRIC normal. geometryNormal has already
+    # been perturbed by the normal map -- the cobblestone map alone tilts it by
+    # ~55 degrees, which both broke the horizontal mask (the whole plaza lit up)
+    # and made the rim crawl with surface detail instead of tracing the outline.
+    '#ifdef FLAT_SHADED\\n'
+    'vec3 celGeoNormal = geometryNormal;\\n'
+    '#else\\n'
+    'vec3 celGeoNormal = normalize( vNormal );\\n'
+    '#ifdef DOUBLE_SIDED\\n'
+    'celGeoNormal *= faceDirection;\\n'
+    '#endif\\n'
+    '#endif\\n'
+    'vec3 celUpView = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );\\n'
+    'float celFlatness = smoothstep( 0.32, 0.78, abs( dot( celGeoNormal, celUpView ) ) );\\n'
+    'vec3 celAlbedo = max( material.diffuseColor, vec3( 0.004 ) );\\n'
+    'float celAlbedoMax = max( max( celAlbedo.r, celAlbedo.g ), celAlbedo.b );\\n'
+    'vec3 celIrradiance = reflectedLight.directDiffuse / celAlbedo;\\n'
+    'float celLum = dot( celIrradiance, vec3( 0.2126, 0.7152, 0.0722 ) );\\n'
+    'if ( celLum > 0.0025 && celAlbedoMax > 0.02 ) {\\n'
+    'float celT = celLum / ( celLum + 1.0 );\\n'
+    f'float celQ = ( floor( celT * {CEL_BANDS} ) + 0.5 ) / {CEL_BANDS};\\n'
+    f'float celHardness = mix( {CEL_HARDNESS}, {CEL_HARDNESS} * 0.28, celFlatness );\\n'
+    'celQ = clamp( mix( celT, celQ, celHardness ), 0.02, 0.96 );\\n'
+    'reflectedLight.directDiffuse *= clamp( ( celQ / ( 1.0 - celQ ) ) / celLum, 0.42, 1.08 );\\n'
+    '}\\n'
+    'float celRim = 1.0 - saturate( dot( celGeoNormal, geometryViewDir ) );\\n'
+    f'celRim = smoothstep( {CEL_RIM_START}, {CEL_RIM_END}, celRim );\\n'
+    # A ground plane seen from a low camera is all grazing angles, so a plain
+    # Fresnel term lights the entire floor. Rotate world-up into view space and
+    # mask out anything roughly horizontal: the rim then lands on walls,
+    # characters, trees and props -- the silhouettes anime actually inks.
+    'celRim *= 1.0 - celFlatness;\\n'
+    f'totalEmissiveRadiance += {CEL_RIM_COLOR} * celRim * {CEL_RIM_STRENGTH};\\n"'
+)
+
+
+def cel_installer(material_class: str) -> str:
+    """ES5 source that hooks cel shading onto the given material class."""
+    return (
+        "function cardinalInstallCel(M){"
+        "if(!M||!M.prototype||M.prototype.__cardinalCel)return;"
+        "M.prototype.__cardinalCel=1;"
+        "M.prototype.onBeforeCompile=function(shader){"
+        "shader.fragmentShader=shader.fragmentShader.replace("
+        '"#include <aomap_fragment>",' + CEL_GLSL + ");"
+        "};}"
+        f"try{{cardinalInstallCel({material_class});}}catch(err){{}}"
+    )
 
 # --------------------------------------------------------------------------
 # Adaptive texture tier.
@@ -107,9 +189,9 @@ def world_patches(*, marker: str, helper: str, quality: str) -> list[tuple[str, 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
     WORLD: [
         (
-            "texture tier selector + cache marker",
+            "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
-            f'IC="{RELEASE}";{TEXTURE_SELECTOR}'
+            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}'
             'function c_(r){var u=cardinalWorldHiTexture()?r.replace(/\\.jpg$/i,"-hi.jpg"):r;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
         ),
@@ -174,9 +256,9 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     WORLD_LEGACY: [
         (
-            "texture tier selector + cache marker",
+            "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
-            f'pv="{RELEASE}";{TEXTURE_SELECTOR}'
+            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}'
             'function mv(e){var u=cardinalWorldHiTexture()?e.replace(/\\.jpg$/i,"-hi.jpg"):e;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
         ),

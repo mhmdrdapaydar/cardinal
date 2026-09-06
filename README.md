@@ -20,12 +20,14 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Graphics release `20260906-world-graphics-2`
+## Graphics release `20260906-anime-1`
 
 This release is **presentation-only**. No game rule, formula, reward, cost, cooldown or progression value was touched, and `api.php`, `lib/Game.php`, `lib/Rules.php`, `lib/DemoGame.php` and `config.php` are byte-for-byte unchanged. Player progress therefore stays directly comparable with the other Cardinal servers.
 
 What changed in the rendered world:
 
+- **Cel shading.** Every `MeshStandardMaterial` is hooked through `onBeforeCompile`, a single global entry point that leaves meshes, material assignments and scene structure untouched. The direct diffuse irradiance is divided out of the albedo, quantised into three bands and multiplied back, so the terminator falls in the same place on every object no matter how light or dark its texture is. Band hardness is surface-aware: crisp anime steps on characters, props and walls, much softer on the ground, where a hard step reads as a spotlight and erases the cobblestone relief.
+- **Anime rim light.** A Fresnel term added to emissive traces silhouettes in cool cyan. It is computed from the *geometric* normal rather than the normal-mapped one: the cobblestone map alone tilts the shading normal by roughly 55 degrees, which previously lit the entire plaza and made the rim crawl with surface detail instead of following the outline. Horizontal surfaces are masked out entirely, so floors never glow.
 - **Real cast shadows.** The directional light shipped with a default ±5-unit shadow frustum, so its shadow map covered a 10×10 patch around the origin and was effectively invisible. The frustum is now ±26 units with a 2048² map on the high tier (1024² otherwise), plus a depth bias and normal bias matched to the new texel footprint.
 - **Screen-space bloom.** The bundle contains no `EffectComposer`, so a post-processing pass cannot be added without rebuilding from source. Instead the world layer applies a thresholded, blurred, `screen`-blended backdrop: `contrast()` crushes mid-tones to black so only the fountain crown, lamps and emissive crystals bloom. High tier only — if the device cannot hold frame rate, the existing auto-downgrade drops to `balanced` and the layer disappears with it.
 - **Two-tier textures.** Every material and normal map now ships at both 512px (`<name>.jpg`) and 1024px (`<name>-hi.jpg`). Desktop-class clients load the 1024px set; phones, coarse-pointer devices, low-memory devices, and anyone sending `Save-Data` or `prefers-reduced-data` keep the original 512px payload. The maps were regenerated as seamlessly tileable with wrap-aware normals, so tiling seams are lower than in the previous build at both sizes.
@@ -52,7 +54,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-<release>.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260906-anime-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 
@@ -94,7 +96,7 @@ If this package replaces an older deployment, extract it with **overwrite enable
 - `index.html`;
 - the complete `assets/` directory, including files named `cardinal-current-*.js` and `cardinal-current.css`.
 
-Asset filenames are content-hashed and change with every graphics release, because `.htaccess` caches `.js`, `.css` and `.jpg` as `immutable` for a year. Delete the old `assets/` contents rather than merging into them, so no bundle from a previous release is left behind. The `20260906-world-graphics-2` release also adds `<name>-hi.jpg` companions next to each material map; those are part of the asset directory and must be uploaded with it. `tools/` is build tooling and can be skipped entirely.
+Asset filenames are content-hashed and change with every graphics release, because `.htaccess` caches `.js`, `.css` and `.jpg` as `immutable` for a year. Delete the old `assets/` contents rather than merging into them, so no bundle from a previous release is left behind. The graphics releases also add `<name>-hi.jpg` companions next to each material map; those are part of the asset directory and must be uploaded with it. `tools/` is build tooling and can be skipped entirely.
 
 In cPanel **File Manager → Settings**, enable **Show Hidden Files (dotfiles)** before extracting or uploading. Confirm the new `.htaccess` is in the site's root, beside `index.html` and `api.php`—not in a nested ZIP folder. Its compatibility rules deliberately rewrite only *missing* old hashed assets; a previous rule could redirect an existing current JavaScript asset to a deleted bundle and leave the startup card visible forever.
 

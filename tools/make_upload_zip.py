@@ -31,7 +31,7 @@ import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-RELEASE = "20260906-world-graphics-2"
+PACKAGE = "20260906-anime-1"
 
 INCLUDE_FILES = [
     ".htaccess",
@@ -122,7 +122,7 @@ def verify(zip_path: pathlib.Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", default=str(ROOT / f"cardinal-web-server5-{RELEASE}.zip"))
+    parser.add_argument("--output", default=str(ROOT / f"cardinal-web-server5-{PACKAGE}.zip"))
     args = parser.parse_args()
 
     out = pathlib.Path(args.output).resolve()
@@ -138,7 +138,7 @@ def main() -> int:
     total = sum(f.stat().st_size for f in files)
     print(f"{out}")
     print(f"  {len(files)} files, {total / 1024 / 1024:.2f} MB raw -> {out.stat().st_size / 1024 / 1024:.2f} MB zipped")
-    print(f"  release marker: {RELEASE}")
+    print(f"  package: {PACKAGE}")
     print("  verified: asset graph resolves, .htaccess present, PHP logic untouched, no tools/")
     return 0
 

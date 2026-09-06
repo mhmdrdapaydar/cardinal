@@ -71,9 +71,9 @@
 }
 
 .world:has(.world-cinematic-shimmer--high)::before {
-  opacity: .6;
-  -webkit-backdrop-filter: blur(9px) contrast(5) brightness(.3) saturate(1.5);
-  backdrop-filter: blur(9px) contrast(5) brightness(.3) saturate(1.5);
+  opacity: .58;
+  -webkit-backdrop-filter: blur(9px) contrast(5.2) brightness(.28) saturate(1.55);
+  backdrop-filter: blur(9px) contrast(5.2) brightness(.28) saturate(1.55);
   mix-blend-mode: screen;
   -webkit-mask-image: radial-gradient(ellipse 96% 88% at 50% 46%, rgba(0, 0, 0, .95), rgba(0, 0, 0, .5) 82%);
   mask-image: radial-gradient(ellipse 96% 88% at 50% 46%, rgba(0, 0, 0, .95), rgba(0, 0, 0, .5) 82%);
@@ -89,6 +89,20 @@
   height: auto;
   pointer-events: none;
   background:
+    radial-gradient(1.4px 1.4px at 11% 7%, rgba(255,255,255,.85), transparent),
+    radial-gradient(1px 1px at 23% 14%, rgba(214,232,255,.7), transparent),
+    radial-gradient(1.6px 1.6px at 34% 5%, rgba(255,255,255,.9), transparent),
+    radial-gradient(1px 1px at 44% 17%, rgba(198,224,255,.6), transparent),
+    radial-gradient(1.2px 1.2px at 56% 9%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1px 1px at 63% 20%, rgba(214,232,255,.55), transparent),
+    radial-gradient(1.7px 1.7px at 72% 6%, rgba(255,255,255,.9), transparent),
+    radial-gradient(1px 1px at 81% 15%, rgba(198,224,255,.65), transparent),
+    radial-gradient(1.3px 1.3px at 89% 4%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1px 1px at 95% 19%, rgba(214,232,255,.5), transparent),
+    radial-gradient(1.1px 1.1px at 6% 22%, rgba(255,255,255,.6), transparent),
+    radial-gradient(1.4px 1.4px at 17% 27%, rgba(224,240,255,.5), transparent),
+    radial-gradient(1px 1px at 50% 25%, rgba(255,255,255,.45), transparent),
+    radial-gradient(1.2px 1.2px at 77% 26%, rgba(224,240,255,.5), transparent),
     radial-gradient(ellipse 124% 98% at 50% 44%, transparent 52%, rgba(3, 8, 19, .17) 82%, rgba(2, 6, 15, .4) 100%),
     linear-gradient(0deg, rgba(2, 8, 18, .34) 0%, transparent 19%),
     linear-gradient(180deg, rgba(10, 26, 52, .2) 0%, transparent 17%),
@@ -97,7 +111,7 @@
 
 
 .world canvas {
-  filter: saturate(1.22) contrast(1.075) brightness(1.05);
+  filter: saturate(1.26) contrast(1.085) brightness(1.02);
 }
 
 /* -- 03  world: cinematic shimmer rework ---------------------------------- */
@@ -715,4 +729,136 @@ input:focus {
     background: rgba(10, 21, 40, .96);
   }
   .world::before { display: none; }
+}
+
+/* ==========================================================================
+   12  SAO system layer — angular "Cardinal system" interface
+   ==========================================================================
+   Pushes the HUD from generic dark-glass towards the Sword Art Online
+   system-window language: clipped corners instead of rounded ones, hairline
+   cyan rules, small-caps latin system labels, and a faint hologram flicker.
+
+   Purely cosmetic. No element is moved, resized or removed, every hit area
+   keeps its original box, and the touch controls stay round because they are
+   thumb targets.
+   ========================================================================== */
+
+/* clipped "system window" corners */
+.world-hud__hint,
+.world-hud__status,
+.world-hud__realm {
+  border-radius: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.game-panel {
+  border-radius: 2px;
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+}
+
+.toast {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.auth-card {
+  clip-path: polygon(24px 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%, 0 24px);
+}
+
+/* hairline system rules that read as a scanning frame */
+.world-hud__hint::after,
+.world-hud__status::after,
+.world-hud__realm::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 12%;
+  left: 12%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--fx-cyan), transparent);
+  opacity: .7;
+}
+
+/* the HP/XP bar gets the SAO cut-off end */
+.progress {
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+.progress i {
+  border-radius: 0;
+  background: linear-gradient(90deg, #2f7fe0, #6fd6ff 58%, #dff4ff);
+}
+
+/* nav items as system list rows */
+.nav-item {
+  border-radius: 0 3px 3px 0;
+}
+.nav-item--active {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+
+/* system-window headers */
+.panel-header {
+  position: relative;
+}
+.panel-icon {
+  border-radius: 3px;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* buttons: angular, with a bright leading edge */
+.button,
+.auth-submit,
+.auth-tab {
+  border-radius: 2px;
+}
+.button::before,
+.auth-submit::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, .55);
+  opacity: .55;
+}
+
+/* faint hologram flicker across the whole HUD — very low amplitude so it
+   reads as a live system window rather than a broken screen */
+.world-hud,
+.world-caption {
+  animation: fx-holo 7.5s steps(1, end) infinite;
+}
+@keyframes fx-holo {
+  0%, 96%, 100% { opacity: 1; }
+  97%           { opacity: .93; }
+  98%           { opacity: 1; }
+  99%           { opacity: .96; }
+}
+
+/* latin system labels in the HUD read as small-caps telemetry */
+.world-hud kbd {
+  border-radius: 2px;
+  font-family: "Segoe UI", Tahoma, monospace;
+  letter-spacing: .06em;
+}
+
+.world-sign,
+.avatar-label {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* the player's own nameplate gets the SAO cursor colour */
+.avatar-label--self {
+  border-color: rgba(120, 224, 255, .7);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .4), 0 0 18px rgba(111, 214, 255, .34);
+  text-shadow: 0 0 10px rgba(190, 240, 255, .6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-hud,
+  .world-caption { animation: none; }
 }
