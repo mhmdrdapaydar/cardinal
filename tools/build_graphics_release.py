@@ -90,10 +90,14 @@ PACKAGE = "20260906-anime-1"
 # --------------------------------------------------------------------------
 CEL_BANDS = "3.0"        # number of light steps
 CEL_HARDNESS = "0.88"    # 0 = smooth as before, 1 = hard steps
-CEL_RIM_COLOR = "vec3( 0.42, 0.72, 1.0 )"
-CEL_RIM_STRENGTH = "0.34"
-CEL_RIM_START = "0.48"
-CEL_RIM_END = "0.99"
+CEL_RIM_COLOR = "vec3( 0.46, 0.76, 1.0 )"
+CEL_SHADOW_TINT = "vec3( 0.72, 0.74, 1.06 )"   # cool violet where light does not reach
+CEL_LIGHT_TINT = "vec3( 1.06, 1.02, 0.95 )"    # warm bounce on the lit side
+CEL_RIM_STRENGTH = "0.40"
+CEL_RIM_START = "0.40"
+CEL_RIM_END = "0.84"
+CEL_INK_START = "0.88"      # only the last sliver before the silhouette
+CEL_INK_DARKNESS = "0.24"   # how dark the drawn contour goes
 
 CEL_GLSL = (
     '"#include <aomap_fragment>\\n'
@@ -122,8 +126,23 @@ CEL_GLSL = (
     'celQ = clamp( mix( celT, celQ, celHardness ), 0.02, 0.96 );\\n'
     'reflectedLight.directDiffuse *= clamp( ( celQ / ( 1.0 - celQ ) ) / celLum, 0.42, 1.08 );\\n'
     '}\\n'
-    'float celRim = 1.0 - saturate( dot( celGeoNormal, geometryViewDir ) );\\n'
-    f'celRim = smoothstep( {CEL_RIM_START}, {CEL_RIM_END}, celRim );\\n'
+    # Unlit areas drift toward a cool violet instead of going flat grey, and
+    # lit areas pick up a faint warm bounce. This colour split is what
+    # separates anime cel shading from plain posterisation.
+    'float celLit = smoothstep( 0.04, 0.42, celLum );\\n'
+    f'reflectedLight.indirectDiffuse *= mix( {CEL_SHADOW_TINT}, {CEL_LIGHT_TINT}, celLit );\\n'
+
+    'float celFacing = 1.0 - saturate( dot( celGeoNormal, geometryViewDir ) );\\n'
+    # Ink contour. On a model built from spheres, cylinders and cones the
+    # very edge of each primitive turns almost perpendicular to the eye, so
+    # darkening that sliver reads as a drawn outline without needing an
+    # inverted-hull pass (which would mean touching the scene graph).
+    f'float celInk = smoothstep( {CEL_INK_START}, 1.0, celFacing ) * ( 1.0 - celFlatness );\\n'
+    f'float celInkMul = mix( 1.0, {CEL_INK_DARKNESS}, celInk );\\n'
+    'reflectedLight.directDiffuse *= celInkMul;\\n'
+    'reflectedLight.indirectDiffuse *= celInkMul;\\n'
+    'float celRim = celFacing;\\n'
+    f'celRim = smoothstep( {CEL_RIM_START}, {CEL_RIM_END}, celRim ) * ( 1.0 - celInk );\\n'
     # A ground plane seen from a low camera is all grazing angles, so a plain
     # Fresnel term lights the entire floor. Rotate world-up into view space and
     # mask out anything roughly horizontal: the rim then lands on walls,
@@ -184,6 +203,86 @@ TEXTURE_SELECTOR = (
 def world_patches(*, marker: str, helper: str, quality: str) -> list[tuple[str, str, str]]:
     """Patches shared by both world chunks, parameterised by minified names."""
     return []
+
+
+# --------------------------------------------------------------------------
+# Interface fixes (client side of the equipment / discard work).
+#
+# These are navigation and UI wiring only. The rules they surface live in
+# lib/Game.php, which was changed separately and deliberately.
+# --------------------------------------------------------------------------
+
+# Identical string literals in both the modern and the legacy entry bundle.
+SHARED_UI_PATCHES = [
+    (
+        "backpack panel reachable outside the city",
+        '["inventory","shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
+        '["shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
+    ),
+    (
+        "backpack entry in the wild sidebar",
+        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},{panel:"party"',
+        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},'
+        '{panel:"inventory",icon:"\U0001f392",label:"\u0645\u0648\u062c\u0648\u062f\u06cc"},{panel:"party"',
+    ),
+]
+
+DROP = "\u062f\u0648\u0631 \u0627\u0646\u062f\u0627\u062e\u062a\u0646"                     # "discard"
+DROP_MATERIAL = DROP + " \u0645\u0627\u062f\u0647 \u0627\u0648\u0644\u06cc\u0647"           # "discard material"
+DROP_ITEM = DROP + " \u0622\u06cc\u062a\u0645"                                                   # "discard item"
+DROP_CRAFTED = (DROP + " \u062f\u0627\u0626\u0645\u06cc \u0622\u06cc\u062a\u0645 "
+                + "\u0633\u0627\u062e\u062a\u0647\u200c\u0634\u062f\u0647")                 # "permanently discard crafted item"
+TRANSFER = "\u0627\u0646\u062a\u0642\u0627\u0644"                                              # "transfer"
+
+MODERN_UI_PATCHES = [
+    (
+        "discard button on crafted items",
+        'c.isTradeable&&!c.equipped&&l.jsx("div",{className:"row-actions",children:'
+        'l.jsx(T,{tone:"ghost",onClick:()=>h({type:"crafted",id:c.instanceId,name:c.itemName}),'
+        f'children:"{TRANSFER}"}})}})',
+        '!c.equipped&&l.jsxs("div",{className:"row-actions",children:['
+        'c.isTradeable&&l.jsx(T,{tone:"ghost",onClick:()=>h({type:"crafted",id:c.instanceId,name:c.itemName}),'
+        f'children:"{TRANSFER}"}}),'
+        'l.jsx(T,{tone:"danger",onClick:()=>y({type:"crafted",id:c.instanceId,name:c.itemName,max:1}),'
+        f'children:"{DROP}"}})]}})',
+    ),
+    (
+        "route crafted discards to drop-crafted",
+        f'title:p.type==="mini"?"{DROP_MATERIAL}":"{DROP_ITEM}"',
+        f'title:p.type==="crafted"?"{DROP_CRAFTED}":p.type==="mini"?"{DROP_MATERIAL}":"{DROP_ITEM}"',
+    ),
+    (
+        "crafted discard payload",
+        '_(p.type==="mini"?"drop-mini":"drop-item",p.type==="mini"?{miniItemId:p.id,quantity:c}:{itemId:p.id,quantity:c})',
+        '_(p.type==="crafted"?"drop-crafted":p.type==="mini"?"drop-mini":"drop-item",'
+        'p.type==="crafted"?{instanceId:p.id}:p.type==="mini"?{miniItemId:p.id,quantity:c}:{itemId:p.id,quantity:c})',
+    ),
+]
+
+LEGACY_UI_PATCHES = [
+    (
+        "discard button on crafted items",
+        'e.isTradeable&&!e.equipped&&ce.jsx("div",{className:"row-actions",children:'
+        'ce.jsx(op,{tone:"ghost",onClick:function(){return m({type:"crafted",id:e.instanceId,name:e.itemName})},'
+        f'children:"{TRANSFER}"}})}})',
+        '!e.equipped&&ce.jsxs("div",{className:"row-actions",children:['
+        'e.isTradeable&&ce.jsx(op,{tone:"ghost",onClick:function(){return m({type:"crafted",id:e.instanceId,name:e.itemName})},'
+        f'children:"{TRANSFER}"}}),'
+        'ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"crafted",id:e.instanceId,name:e.itemName,max:1})},'
+        f'children:"{DROP}"}})]}})',
+    ),
+    (
+        "route crafted discards to drop-crafted",
+        f'title:"mini"===y.type?"{DROP_MATERIAL}":"{DROP_ITEM}"',
+        f'title:"crafted"===y.type?"{DROP_CRAFTED}":"mini"===y.type?"{DROP_MATERIAL}":"{DROP_ITEM}"',
+    ),
+    (
+        "crafted discard payload",
+        'S("mini"===y.type?"drop-mini":"drop-item","mini"===y.type?{miniItemId:y.id,quantity:n}:{itemId:y.id,quantity:n})',
+        'S("crafted"===y.type?"drop-crafted":"mini"===y.type?"drop-mini":"drop-item",'
+        '"crafted"===y.type?{instanceId:y.id}:"mini"===y.type?{miniItemId:y.id,quantity:n}:{itemId:y.id,quantity:n})',
+    ),
+]
 
 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
@@ -254,6 +353,8 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
             'f.jsx(di,{count:44,scale:[22,8,22],position:[0,2,0],size:2.4,speed:.22,color:"#baffec"})',
         ),
     ],
+    MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
+    MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
     WORLD_LEGACY: [
         (
             "texture tier + cel-shading installer",

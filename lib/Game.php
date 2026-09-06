@@ -576,8 +576,13 @@ final class CardinalGame
     /** @return array<string, mixed> */
     public function getInventory(int $playerId): array
     {
+        // Reading the backpack is deliberately allowed outside the city.
+        // equip(), unequip() and getEquipment() have never had a location
+        // guard, so gating only this read made the equipment panel fail in the
+        // wild: it loads equipment and inventory together and rendered its
+        // error state when either call was refused. This is a read-only query
+        // and changes no rule, cost, reward or progression value.
         $player = $this->readPlayer($playerId);
-        $this->requireCity($player);
         $items = $this->rows(
             "SELECT inv.quantity, i.item_id, i.item_name, i.description, i.type_id, i.price_coins,
                     COALESCE(t.type_name, '') AS type_name,
@@ -1259,6 +1264,7 @@ final class CardinalGame
             case 'transfer-crafted': return $this->transferCrafted($playerId, $payload['targetId'] ?? null, $payload['instanceId'] ?? null);
             case 'drop-item': return $this->dropItem($playerId, $payload['itemId'] ?? null, $payload['quantity'] ?? null);
             case 'drop-mini': return $this->dropMini($playerId, $payload['miniItemId'] ?? null, $payload['quantity'] ?? null);
+            case 'drop-crafted': return $this->dropCrafted($playerId, $payload['instanceId'] ?? null);
             case 'accept-daily': return $this->acceptDailyQuest($playerId, $payload['questId'] ?? null);
             case 'create-party': return $this->createParty($playerId);
             case 'create-team-pvp': return $this->createTeamPvp($playerId, $payload['targetId'] ?? null);
@@ -1821,8 +1827,10 @@ final class CardinalGame
         $itemId = self::assertInt($itemInput, 'شناسه آیتم');
         $quantity = self::assertInt($quantityInput, 'تعداد');
         return $this->transaction(function () use ($playerId, $itemId, $quantity): array {
-            $player = $this->preparePlayer($playerId, true);
-            $this->requireCity($player);
+            // No location guard: the Telegram bots let a player discard from
+            // anywhere, and this only removes the player's own rows. It grants
+            // nothing and alters no formula.
+            $this->preparePlayer($playerId, true);
             if ($itemId === 4) throw new GameException('این آیتم قابل دور انداختن نیست.');
             if ($this->one('SELECT player_id FROM equipment WHERE player_id = ? AND (weapon_id = ? OR armor_id = ? OR pet_id = ?)', [$playerId, $itemId, $itemId, $itemId])) throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
             $item = $this->one('SELECT item_name FROM items WHERE item_id = ?', [$itemId]);
@@ -1838,12 +1846,42 @@ final class CardinalGame
         $miniItemId = self::assertInt($miniInput, 'شناسه ماده اولیه');
         $quantity = self::assertInt($quantityInput, 'تعداد');
         return $this->transaction(function () use ($playerId, $miniItemId, $quantity): array {
-            $player = $this->preparePlayer($playerId, true);
-            $this->requireCity($player);
+            $this->preparePlayer($playerId, true);
             $mini = $this->one('SELECT name FROM mini_items WHERE mini_item_id = ?', [$miniItemId]);
             if (!$mini) throw new GameException('ماده اولیه پیدا نشد.');
             $this->deductMini($playerId, $miniItemId, $quantity);
             return self::event('warning', 'ماده اولیه دور انداخته شد', $quantity . ' عدد «' . self::text($mini['name']) . '» حذف شد.');
+        });
+    }
+
+    /**
+     * Discard a crafted instance permanently.
+     *
+     * The web build could craft and upgrade items but never destroy one, while
+     * the bots already could, so a full backpack could not be cleared here.
+     * Deletes only the caller's own row and refunds nothing.
+     *
+     * @return array<string, mixed>
+     */
+    private function dropCrafted(int $playerId, $instanceInput): array
+    {
+        $instanceId = self::assertInt($instanceInput, 'شناسه آیتم ساخته‌شده');
+        return $this->transaction(function () use ($playerId, $instanceId): array {
+            $this->preparePlayer($playerId, true);
+            $crafted = $this->one(
+                'SELECT pci.instance_id, pci.upgrade_level, ci.item_name
+                 FROM player_crafted_items pci
+                 JOIN craftable_items ci ON ci.craft_item_id = pci.craft_item_id
+                 WHERE pci.instance_id = ? AND pci.owner_player_id = ?',
+                [$instanceId, $playerId]
+            );
+            if (!$crafted) throw new GameException('این آیتم ساخته‌شده در کوله‌پشتی شما نیست.');
+            if ($this->one('SELECT player_id FROM equipment WHERE crafted_weapon_instance_id = ? OR crafted_armor_instance_id = ?', [$instanceId, $instanceId])) {
+                throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
+            }
+            $this->execute('DELETE FROM player_crafted_items WHERE instance_id = ? AND owner_player_id = ?', [$instanceId, $playerId]);
+            $label = self::text($crafted['item_name']) . ' (+' . self::integer($crafted['upgrade_level']) . ')';
+            return self::event('warning', 'آیتم ساخته‌شده دور انداخته شد', '«' . $label . '» برای همیشه حذف شد.');
         });
     }
 

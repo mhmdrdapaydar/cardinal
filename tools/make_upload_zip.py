@@ -31,7 +31,7 @@ import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PACKAGE = "20260906-anime-1"
+PACKAGE = "20260906-anime-2"
 
 INCLUDE_FILES = [
     ".htaccess",
@@ -56,6 +56,12 @@ LOGIC_FILES = [
     "lib/Rules.php",
     "lib/DemoGame.php",
 ]
+
+# Files that must never regress to a location-gated inventory read again, and
+# the action the interface now depends on. Cheap tripwires against a bad merge.
+REQUIRED_SNIPPETS = {
+    "lib/Game.php": ["case 'drop-crafted'", "private function dropCrafted"],
+}
 
 
 def collect() -> list[pathlib.Path]:
@@ -110,6 +116,12 @@ def verify(zip_path: pathlib.Path) -> None:
         if any(n.startswith("tools/") for n in names):
             sys.exit("ABORT: build tooling leaked into the upload archive")
 
+        for path, snippets in REQUIRED_SNIPPETS.items():
+            body = archive.read(path).decode("utf-8")
+            for snippet in snippets:
+                if snippet not in body:
+                    sys.exit(f"ABORT: {path} in the archive is missing {snippet!r}")
+
         # both texture tiers must ship together
         base_maps = {n for n in names if n.startswith("assets/") and n.endswith(".jpg") and "-hi." not in n}
         for jpg in sorted(base_maps):
@@ -139,7 +151,7 @@ def main() -> int:
     print(f"{out}")
     print(f"  {len(files)} files, {total / 1024 / 1024:.2f} MB raw -> {out.stat().st_size / 1024 / 1024:.2f} MB zipped")
     print(f"  package: {PACKAGE}")
-    print("  verified: asset graph resolves, .htaccess present, PHP logic untouched, no tools/")
+    print("  verified: asset graph resolves, .htaccess present, PHP files match the tree, no tools/")
     return 0
 
 
