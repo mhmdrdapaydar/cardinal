@@ -10,6 +10,7 @@ about a game rule, formula, reward, cost, cooldown or progression value.
 | File | Purpose |
 | --- | --- |
 | `build_graphics_release.py` | Applies the graphics patches to the shipped Vite build, appends `cardinal-fx.css`, re-hashes the bundles and rewires `index.html`. |
+| `cardinal-places.js` | Extra world geometry (outer district, rooftop details, lanterns, floating isles) as one ES5 factory shared by the modern and legacy bundles. |
 | `cardinal-fx.css` | The cinematic/HUD layer as readable, commented CSS. Edit this, not the minified stylesheet. |
 | `enhance_textures.py` | Regenerates every material and normal map as seamlessly tileable 512px + 1024px pairs. |
 | `bundle-originals/` | Pristine copies of the shipped bundles. The release builder always patches from these, so it is idempotent. Do not edit. |

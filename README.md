@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260906-anime-3`
+## Release `20260906-places-1`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -41,6 +41,7 @@ Presentation only, and unchanged in intent from the previous releases.
 
 What changed in the rendered world:
 
+- **Place detail.** New geometry in both realms, from `tools/cardinal-places.js`. `kC()` clamps the avatar to radius 33.25 in the city and 60 in the wild, so an outer district and a horizon skyline placed past that line are visible but unreachable and need no collider. The house ring is laid out by a closed-form expression in the build, so its exact transforms are recoverable: each house now carries a ridge beam, chimney, eave lamp, and — depending on the variant — a hanging shop sign, roof lantern or facade banner, all above head height on a building that already has a collider. The city also gets lantern garlands and drifting sky lanterns; the wild gets floating rock shelves. Everything is quality-tiered and the low tier renders static silhouettes only.
 - **Hard-edged specular.** A PBR highlight is a soft blob; the anime convention is a sheen that snaps on. Thresholding the specular the engine already computes gives that without needing the light vector in the hook.
 - **Ink contour.** The very edge of each primitive turns nearly perpendicular to the eye, so darkening that sliver reads as a drawn outline. This avoids an inverted-hull pass, which would have meant restructuring the scene graph. Floors are excluded.
 - **Cel shading.** Every `MeshStandardMaterial` is hooked through `onBeforeCompile`, a single global entry point that leaves meshes, material assignments and scene structure untouched. The direct diffuse irradiance is divided out of the albedo, quantised into three bands and multiplied back, so the terminator falls in the same place on every object no matter how light or dark its texture is. Band hardness is surface-aware: crisp anime steps on characters, props and walls, much softer on the ground, where a hard step reads as a spotlight and erases the cobblestone relief.
@@ -72,7 +73,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260906-anime-3.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260906-places-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

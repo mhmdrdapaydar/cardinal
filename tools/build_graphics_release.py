@@ -158,6 +158,20 @@ CEL_GLSL = (
 )
 
 
+# --------------------------------------------------------------------------
+# Extra place detail (tools/cardinal-places.js).
+#
+# One ES5 factory serves both bundles; each is handed its own JSX runtime,
+# React and useFrame. Everything it renders sits 5+ units up or at radius 55+,
+# so it can never conflict with the collision volumes the build already ships.
+# --------------------------------------------------------------------------
+PLACES_SOURCE = (ROOT / "tools" / "cardinal-places.js").read_text(encoding="utf-8")
+
+
+def places_installer(jsx: str, react: str, use_frame: str) -> str:
+    return PLACES_SOURCE + f"\nvar cardinalPlaces=cardinalMakePlaces({jsx},{react},{use_frame});\n"
+
+
 def cel_installer(material_class: str) -> str:
     """ES5 source that hooks cel shading onto the given material class."""
     return (
@@ -283,12 +297,17 @@ LEGACY_UI_PATCHES = [
 ]
 
 
+LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palette:a,city:!0,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),b.jsx(Gv,{palette:a,city:!0,quality:n})'), ('mount place detail in the wild scene', 'b.jsx(Gv,{palette:a,city:!1,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),b.jsx(Gv,{palette:a,city:!1,quality:n})')]
+
+MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palette:i,city:!0,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),f.jsx(x_,{palette:i,city:!0,quality:e})'), ('mount place detail in the wild scene', 'f.jsx(x_,{palette:i,city:!1,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),f.jsx(x_,{palette:i,city:!1,quality:e})')]
+
+
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: [
+    WORLD: MODERN_PLACE_MOUNTS + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
-            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}'
+            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}{places_installer("f", "H", "kt")}'
             'function c_(r){var u=cardinalWorldHiTexture()?r.replace(/\\.jpg$/i,"-hi.jpg"):r;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
         ),
@@ -353,11 +372,11 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
-            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}'
+            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}{places_installer("b", "_", "Qp")}'
             'function mv(e){var u=cardinalWorldHiTexture()?e.replace(/\\.jpg$/i,"-hi.jpg"):e;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
         ),
