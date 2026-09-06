@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260906-places-1`
+## Release `20260906-walls-1`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -35,12 +35,19 @@ Discarding remains a **safe-zone action**: `dropItem()`, `dropMini()` and `dropC
 
 If you want any of these to stay restricted on a particular server, re-add the corresponding `$this->requireCity($player);` call — each removal is marked with a comment explaining why it went.
 
+### Interface fix: dead form buttons
+
+The shared Button component hardcoded `type="button"` before spreading its props, so **no form in the app could be submitted by its own button** — clicking simply did nothing. Ten controls were affected: teleport, discarding an item, starting an attack, sending a gift, transferring, forming a party, joining, accepting a partner and two more. Cancel buttons already passed `type="button"` explicitly, which is what shows the intended default was `submit`.
+
+The release builder now scans both entry bundles for Button calls that pass neither `type` nor `onClick` — by construction those can only be a form's submit control — and gives them `type="submit"`. It asserts it finds exactly ten in each bundle.
+
 ### Graphics
 
 Presentation only, and unchanged in intent from the previous releases.
 
 What changed in the rendered world:
 
+- **City wall.** The wall was ten flat 8.2-unit slabs on a radius-35.5 circle, which is 223 units around: it covered 37% of the perimeter. Worse, each slab was rotated by `-u`, pointing its long axis along the radius, so they were spokes sticking out of the city rather than a wall. Segments are now chord-width (`2R·sin(π/N)`) and rotated by `-u - π/2` to sit tangent, closing the ring into a battlemented decagon with an opening at the exit gate. Towers on the joints and a gatehouse over the opening come from the places module; at radius 35.5 they are past the 33.25 movement clamp, so they need no colliders.
 - **Place detail.** New geometry in both realms, from `tools/cardinal-places.js`. `kC()` clamps the avatar to radius 33.25 in the city and 60 in the wild, so an outer district and a horizon skyline placed past that line are visible but unreachable and need no collider. The house ring is laid out by a closed-form expression in the build, so its exact transforms are recoverable: each house now carries a ridge beam, chimney, eave lamp, and — depending on the variant — a hanging shop sign, roof lantern or facade banner, all above head height on a building that already has a collider. The city also gets lantern garlands and drifting sky lanterns; the wild gets floating rock shelves. Everything is quality-tiered and the low tier renders static silhouettes only.
 - **Hard-edged specular.** A PBR highlight is a soft blob; the anime convention is a sheen that snaps on. Thresholding the specular the engine already computes gives that without needing the light vector in the hook.
 - **Ink contour.** The very edge of each primitive turns nearly perpendicular to the eye, so darkening that sliver reads as a drawn outline. This avoids an inverted-hull pass, which would have meant restructuring the scene graph. Floors are excluded.
@@ -73,7 +80,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260906-places-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260906-walls-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

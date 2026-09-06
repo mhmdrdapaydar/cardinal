@@ -188,6 +188,112 @@ function cardinalMakePlaces(J, R, useFrame) {
     return J.jsxs("group", { children: items });
   }
 
+  // ------------------------------------------------------------- ramparts
+  // Towers on the wall joints and a gatehouse over the exit. The wall itself
+  // is the build's own component (fixed separately to actually close the ring);
+  // this adds the vertical punctuation that hides the joints between its flat
+  // chords. Radius 35.5 is past the 33.25 movement clamp, so no colliders.
+  function Ramparts(props) {
+    var palette = props.palette;
+    var segments = props.segments;
+    var R = 35.5;
+    var gateAngle = Math.PI / 2;
+    var items = [];
+    for (var l = 0; l < segments; l++) {
+      var u = (l / segments) * Math.PI * 2;
+      var isGate = Math.abs(Math.atan2(Math.sin(u - gateAngle), Math.cos(u - gateAngle))) < 0.001;
+      items.push(
+        J.jsxs("group", {
+          position: [Math.cos(u) * R, 0, Math.sin(u) * R],
+          rotation: [0, -u - Math.PI * 0.5, 0],
+          children: [
+            J.jsxs("mesh", {
+              position: [0, 2.9, 0],
+              children: [
+                J.jsx("cylinderGeometry", { args: [1.5, 1.85, 5.8, 8] }),
+                J.jsx("meshStandardMaterial", { color: "#93a9c0", roughness: 0.86, metalness: 0.05 })
+              ]
+            }, "shaft"),
+            J.jsxs("mesh", {
+              position: [0, 5.95, 0],
+              children: [
+                J.jsx("cylinderGeometry", { args: [1.95, 1.95, 0.5, 8] }),
+                J.jsx("meshStandardMaterial", { color: "#63788f", roughness: 0.8 })
+              ]
+            }, "corbel"),
+            J.jsxs("mesh", {
+              position: [0, 7.5, 0],
+              children: [
+                J.jsx("coneGeometry", { args: [2.15, 2.7, 8] }),
+                J.jsx("meshStandardMaterial", { color: palette.roof, roughness: 0.66, metalness: 0.18 })
+              ]
+            }, "roof"),
+            J.jsxs("mesh", {
+              position: [0, 9.1, 0],
+              children: [
+                J.jsx("octahedronGeometry", { args: [0.42, 0] }),
+                J.jsx("meshStandardMaterial", {
+                  color: palette.accent,
+                  emissive: palette.accent,
+                  emissiveIntensity: 2,
+                  roughness: 0.3
+                })
+              ]
+            }, "finial"),
+            J.jsxs("mesh", {
+              position: [0, 4.2, 1.55],
+              children: [
+                J.jsx("boxGeometry", { args: [0.5, 0.9, 0.12] }),
+                J.jsx("meshStandardMaterial", {
+                  color: "#ffe0a4",
+                  emissive: palette.accent,
+                  emissiveIntensity: 1.5,
+                  roughness: 0.45
+                })
+              ]
+            }, "window")
+          ]
+        }, l)
+      );
+    }
+    // gatehouse: a raised arch spanning the opening the wall now leaves
+    items.push(
+      J.jsxs("group", {
+        position: [Math.cos(gateAngle) * R, 0, Math.sin(gateAngle) * R],
+        rotation: [0, -gateAngle - Math.PI * 0.5, 0],
+        children: [
+          J.jsxs("mesh", {
+            position: [0, 6.6, 0],
+            children: [
+              J.jsx("boxGeometry", { args: [9.4, 1.5, 1.5] }),
+              J.jsx("meshStandardMaterial", { color: "#93a9c0", roughness: 0.86 })
+            ]
+          }, "lintel"),
+          J.jsxs("mesh", {
+            position: [0, 7.6, 0],
+            children: [
+              J.jsx("boxGeometry", { args: [10.2, 0.55, 1.9] }),
+              J.jsx("meshStandardMaterial", { color: "#63788f", roughness: 0.8 })
+            ]
+          }, "cap"),
+          J.jsxs("mesh", {
+            position: [0, 8.5, 0],
+            children: [
+              J.jsx("boxGeometry", { args: [2.1, 1.3, 0.16] }),
+              J.jsx("meshStandardMaterial", {
+                color: palette.accent,
+                emissive: palette.accent,
+                emissiveIntensity: 1.1,
+                roughness: 0.55
+              })
+            ]
+          }, "crest")
+        ]
+      }, "gate")
+    );
+    return J.jsxs("group", { children: items });
+  }
+
   // -------------------------------------------------------- rooftop details
   // The build lays its houses out with a closed-form expression, so their exact
   // transforms are recoverable and can be decorated precisely:
@@ -527,16 +633,19 @@ function cardinalMakePlaces(J, R, useFrame) {
     var city = props.city;
     if (quality === "low") {
       // device-saver path: static silhouettes only, nothing animated
-      return J.jsxs("group", { children: [
+      var lowKids = [
         J.jsx(OuterDistrict, { palette: palette, city: city, count: city ? 8 : 6 }, "dist"),
         J.jsx(Skyline, { palette: palette, city: city, count: city ? 8 : 6 }, "sky")
-      ] });
+      ];
+      if (city) lowKids.push(J.jsx(Ramparts, { palette: palette, segments: 6 }, "ramp"));
+      return J.jsxs("group", { children: lowKids });
     }
     var children = [
       J.jsx(OuterDistrict, { palette: palette, city: city, count: tier(quality, city ? 13 : 11, city ? 9 : 7, 0) }, "dist"),
       J.jsx(Skyline, { palette: palette, city: city, count: tier(quality, city ? 16 : 14, city ? 10 : 9, 0) }, "sky")
     ];
     if (city) {
+      children.push(J.jsx(Ramparts, { palette: palette, segments: tier(quality, 10, 8, 6) }, "ramp"));
       children.push(J.jsx(Rooftops, { palette: palette, count: tier(quality, 14, 12, 7) }, "roof"));
       children.push(J.jsx(Garlands, { palette: palette, lines: tier(quality, 4, 2, 0), perLine: tier(quality, 9, 7, 0) }, "gar"));
       children.push(J.jsx(SkyLanterns, { palette: palette, count: tier(quality, 16, 8, 0) }, "lan"));

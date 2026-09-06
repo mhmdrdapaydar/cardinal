@@ -299,11 +299,15 @@ LEGACY_UI_PATCHES = [
 
 LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palette:a,city:!0,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),b.jsx(Gv,{palette:a,city:!0,quality:n})'), ('mount place detail in the wild scene', 'b.jsx(Gv,{palette:a,city:!1,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),b.jsx(Gv,{palette:a,city:!1,quality:n})')]
 
+WALL_MODERN = [('city wall: tiers, chord width, gate opening', 'const t=Wt(Yo,1.4,1.1,e),n=Wt(Zo,1.4,1.1,e,en),i=e==="low"?5:10,s=e==="low"?3:6;', 'const t=Wt(Yo,1.4,1.1,e),n=Wt(Zo,1.4,1.1,e,en),i=e==="low"?6:e==="balanced"?8:10,s=e==="low"?4:e==="balanced"?9:12,cw=2*35.5*Math.sin(Math.PI/i)+.5,gs=Math.round(i/4-.5);'), ('city wall: tangential orientation', 'const u=l/i*Math.PI*2,h=Math.cos(u)*35.5,d=Math.sin(u)*35.5;return f.jsxs("group",{position:[h,1.65,d],rotation:[0,-u,0],', 'if(l===gs)return null;const u=(l+.5)/i*Math.PI*2,h=Math.cos(u)*35.5,d=Math.sin(u)*35.5;return f.jsxs("group",{position:[h,1.9,d],rotation:[0,-u-Math.PI/2,0],'), ('city wall: slab spans the full chord', 'f.jsx("boxGeometry",{args:[8.2,3.25,1.05]})', 'f.jsx("boxGeometry",{args:[cw,3.8,1.15]})'), ('city wall: coping course', 'f.jsxs("mesh",{position:[0,1.97,.58],children:[f.jsx("boxGeometry",{args:[7.85,.26,.15]})', 'f.jsxs("mesh",{position:[0,2.05,.62],children:[f.jsx("boxGeometry",{args:[cw*.99,.3,.22]})'), ('city wall: battlements spread over the chord', 'f.jsxs("mesh",{position:[-3.28+g*(6.56/Math.max(1,s-1)),2.05,0],children:[f.jsx("boxGeometry",{args:[.65,.85,1.25]})', 'f.jsxs("mesh",{position:[-cw*.44+g*(cw*.88/Math.max(1,s-1)),2.42,0],children:[f.jsx("boxGeometry",{args:[.72,.98,1.35]})'), ('city wall: banner height', 'l%2===0&&f.jsx(Bs,{position:[0,3.05,.1]', 'l%2===0&&f.jsx(Bs,{position:[0,3.4,.1]')]
+
+WALL_LEGACY = [('city wall: tiers, chord width, gate opening', 'i="low"===t?5:10,a="low"===t?3:6;', 'i="low"===t?6:"balanced"===t?8:10,a="low"===t?4:"balanced"===t?9:12,cw=2*35.5*Math.sin(Math.PI/i)+.5,gs=Math.round(i/4-.5);'), ('city wall: tangential orientation', 'function(e,o){var s=o/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.65,u],rotation:[0,-s,0],', 'function(e,o){if(o===gs)return null;var s=(o+.5)/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.9,u],rotation:[0,-s-Math.PI/2,0],'), ('city wall: slab spans the full chord', 'b.jsx("boxGeometry",{args:[8.2,3.25,1.05]})', 'b.jsx("boxGeometry",{args:[cw,3.8,1.15]})'), ('city wall: coping course', 'b.jsxs("mesh",{position:[0,1.97,.58],children:[b.jsx("boxGeometry",{args:[7.85,.26,.15]})', 'b.jsxs("mesh",{position:[0,2.05,.62],children:[b.jsx("boxGeometry",{args:[cw*.99,.3,.22]})'), ('city wall: battlements spread over the chord', 'b.jsxs("mesh",{position:[t*(6.56/Math.max(1,a-1))-3.28,2.05,0],children:[b.jsx("boxGeometry",{args:[.65,.85,1.25]})', 'b.jsxs("mesh",{position:[t*(cw*.88/Math.max(1,a-1))-cw*.44,2.42,0],children:[b.jsx("boxGeometry",{args:[.72,.98,1.35]})'), ('city wall: banner height', 'o%2==0&&b.jsx(yg,{position:[0,3.05,.1]', 'o%2==0&&b.jsx(yg,{position:[0,3.4,.1]')]
+
 MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palette:i,city:!0,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),f.jsx(x_,{palette:i,city:!0,quality:e})'), ('mount place detail in the wild scene', 'f.jsx(x_,{palette:i,city:!1,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),f.jsx(x_,{palette:i,city:!1,quality:e})')]
 
 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: MODERN_PLACE_MOUNTS + [
+    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
@@ -372,7 +376,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
@@ -480,6 +484,82 @@ STARTUP_CSS = """      html, body, #root { width: 100%; min-height: 100%; margin
 
 
 # --------------------------------------------------------------------------
+def apply_submit_fix(text: str, name: str, jsx: str, button: str, report, expected: int) -> str:
+    """
+    Give form submit buttons a working type.
+
+    The shared Button hardcodes `type="button"` before spreading its props, so
+    every form whose submit control is a Button and does not pass a type is
+    dead: clicking it does nothing at all. Teleport, discarding an item,
+    starting an attack, sending a gift and six more were all in that state.
+    Cancel buttons already pass type="button" explicitly, which is what shows
+    the intended default was "submit".
+
+    Only calls with neither `type:` nor `onClick:` are touched. By construction
+    those can only be a form's submit control -- an action button would carry
+    an onClick.
+    """
+    needle = jsx + ".jsx"
+    out = []
+    i = 0
+    fixed = 0
+    while True:
+        j = text.find(needle, i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        k = j + len(needle)
+        if text.startswith("s(", k):
+            k += 2
+        elif text.startswith("(", k):
+            k += 1
+        else:
+            out.append(text[i:j + len(needle)])
+            i = j + len(needle)
+            continue
+        if not text.startswith(button + ",{", k):
+            out.append(text[i:j + len(needle)])
+            i = j + len(needle)
+            continue
+        brace = k + len(button) + 1
+        # walk the props object, honouring string literals
+        depth = 0
+        q = None
+        m = brace
+        while m < len(text):
+            c = text[m]
+            if q:
+                if c == "\\":
+                    m += 2
+                    continue
+                if c == q:
+                    q = None
+            elif c in "\"'`":
+                q = c
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            m += 1
+        props = text[brace:m + 1]
+        if "type:" not in props and "onClick:" not in props:
+            out.append(text[i:brace + 1])
+            out.append('type:"submit",')
+            out.append(text[brace + 1:m + 1])
+            fixed += 1
+        else:
+            out.append(text[i:m + 1])
+        i = m + 1
+    result = "".join(out)
+    if fixed != expected:
+        report.append(("FAIL", name, "form submit buttons", f"{fixed} fixed, expected {expected}"))
+        return text
+    report.append(("ok", name, "form submit buttons", f"{fixed} buttons"))
+    return result
+
+
 def snapshot_pristine() -> None:
     PRISTINE.mkdir(parents=True, exist_ok=True)
     for name in MANAGED:
@@ -553,6 +633,10 @@ def main() -> int:
         text = apply_literal(text, name, patches, report)
         if name == WORLD_LEGACY:
             text = apply_regex(text, name, LEGACY_REGEX_PATCHES, report)
+        if name == MAIN:
+            text = apply_submit_fix(text, name, "l", "T", report, 10)
+        if name == MAIN_LEGACY:
+            text = apply_submit_fix(text, name, "ce", "op", report, 10)
         content[name] = text.encode("utf-8")
 
     # ---- 2. stylesheet
