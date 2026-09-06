@@ -20,6 +20,22 @@
  */
 
 function cardinalMakeAvatar(J, R, useFrame) {
+  // ------------------------------------------------------------------ head
+  // Carries the painted face. Segment counts go up from 20x16 so the sphere is
+  // smooth enough that the texture does not visibly facet across the cheeks.
+  // The material colour is white: the skin tone lives in the texture, and
+  // multiplying it by a second skin colour would only darken it.
+  function Head(props) {
+    return J.jsxs("mesh", {
+      castShadow: true,
+      position: [0, 1.98, 0],
+      children: [
+        J.jsx("sphereGeometry", { args: [0.34, 36, 26] }),
+        J.jsx("meshStandardMaterial", { map: props.tex, color: "#ffffff", roughness: 0.56 })
+      ]
+    });
+  }
+
   // ------------------------------------------------------------------ hair
   // The build had a squashed hemisphere plus three blobs. Anime hair reads
   // through its silhouette, so this is built from tapered locks: swept bangs
@@ -144,8 +160,8 @@ function cardinalMakeAvatar(J, R, useFrame) {
   }
 
   // ------------------------------------------------------------------ face
-  // Two spheres became elongated anime eyes with an iris, a specular catch
-  // light and brows. Small pieces, but this is what the eye reads first.
+  // NOT MOUNTED. Superseded by the painted texture in make_avatar_face.py,
+  // which reads far better at this scale than geometry can. Kept for reference.
   function Face(props) {
     var visual = props.visual;
     var hair = props.hair;
@@ -328,5 +344,5 @@ function cardinalMakeAvatar(J, R, useFrame) {
     ] });
   }
 
-  return { Hair: Hair, Face: Face, Outfit: Outfit };
+  return { Head: Head, Hair: Hair, Face: Face, Outfit: Outfit };
 }

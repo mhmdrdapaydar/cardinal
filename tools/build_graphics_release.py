@@ -307,11 +307,102 @@ LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palet
 # the label height and the point light are all left alone, so the animation
 # and the avatar's footprint are unchanged.
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Painted face texture.
+#
+# The head is a plain SphereGeometry, so its UVs are equirectangular and the
+# face lands at u = 0.75 (the -Z side the character faces). tools/
+# make_avatar_face.py derives every feature row from the world-space heights
+# the build already used, so the painted eyes sit exactly where the geometric
+# ones did. Filename carries a content hash; it is discovered rather than
+# hardcoded so regenerating the texture does not need a code edit.
+# --------------------------------------------------------------------------
+def plaza_decal_name() -> str:
+    found = sorted(ASSETS.glob("cardinal-plaza-*.png"))
+    if len(found) != 1:
+        sys.exit(f"ABORT: expected exactly one cardinal-plaza-*.png in assets/, found {len(found)}."
+                 " Run: python3 tools/make_plaza_decal.py")
+    return found[0].name
+
+
+def face_texture_name() -> str:
+    found = sorted(ASSETS.glob("cardinal-face-*.png"))
+    if len(found) != 1:
+        sys.exit(f"ABORT: expected exactly one cardinal-face-*.png in assets/, found {len(found)}."
+                 " Run: python3 tools/make_avatar_face.py")
+    return found[0].name
+
 AVATAR_SOURCE = (ROOT / "tools" / "cardinal-avatar.js").read_text(encoding="utf-8")
 
 
 def avatar_installer(jsx: str, react: str, use_frame: str) -> str:
     return AVATAR_SOURCE + f"\nvar cardinalAvatar=cardinalMakeAvatar({jsx},{react},{use_frame});\n"
+
+
+# The plaza sigil is laid flat on the cobblestones with additive blending (2)
+# and no depth write, so it reads as light inlaid in the stone rather than a
+# sticker. The city ground is perfectly flat inside radius 31 -- Nt() smoothsteps
+# from 31 outward -- so 0.06 above it cannot z-fight.
+SIGIL_MODERN = [
+    (
+        "plaza sigil: url constant",
+        'CARDINAL_FACE_URL=""+new URL(',
+        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",import.meta.url).href,CARDINAL_FACE_URL=""+new URL(',
+    ),
+    (
+        "plaza sigil: laid into the plaza",
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),'
+        'f.jsxs("mesh",{rotation:[-Math.PI/2,0,0],position:[0,.06,0],renderOrder:2,children:['
+        'f.jsx("planeGeometry",{args:[34,34]}),'
+        'f.jsx("meshBasicMaterial",{map:Wt(CARDINAL_PLAZA_URL,1,1,e),transparent:!0,opacity:e==="low"?.5:.78,depthWrite:!1,blending:tn,toneMapped:!1})]})',
+    ),
+]
+
+SIGIL_LEGACY = [
+    (
+        "plaza sigil: url constant",
+        'CARDINAL_FACE_URL=""+new URL(',
+        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",v.meta.url).href,CARDINAL_FACE_URL=""+new URL(',
+    ),
+    (
+        "plaza sigil: laid into the plaza",
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),'
+        'b.jsxs("mesh",{rotation:[-Math.PI/2,0,0],position:[0,.06,0],renderOrder:2,children:['
+        'b.jsx("planeGeometry",{args:[34,34]}),'
+        'b.jsx("meshBasicMaterial",{map:Lv(CARDINAL_PLAZA_URL,1,1,n),transparent:!0,opacity:"low"===n?.5:.78,depthWrite:!1,blending:O,toneMapped:!1})]})',
+    ),
+]
+
+
+FACE_MODERN = [
+    (
+        "face texture: url constant",
+        'tm=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",import.meta.url).href',
+        'CARDINAL_FACE_URL=""+new URL("' + "{FACE}" + '",import.meta.url).href,'
+        'tm=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",import.meta.url).href',
+    ),
+    (
+        "face texture: applied to the head",
+        'f.jsxs("mesh",{castShadow:!0,position:[0,1.98,0],children:[f.jsx("sphereGeometry",{args:[.34,20,16]}),f.jsx("meshStandardMaterial",{color:h,roughness:.58})]})',
+        'f.jsx(cardinalAvatar.Head,{skin:h,tex:Wt(CARDINAL_FACE_URL,1,1,"high")})',
+    ),
+]
+
+FACE_LEGACY = [
+    (
+        "face texture: url constant",
+        'iv=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",v.meta.url).href',
+        'CARDINAL_FACE_URL=""+new URL("' + "{FACE}" + '",v.meta.url).href,'
+        'iv=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",v.meta.url).href',
+    ),
+    (
+        "face texture: applied to the head",
+        'b.jsxs("mesh",{castShadow:!0,position:[0,1.98,0],children:[b.jsx("sphereGeometry",{args:[.34,20,16]}),b.jsx("meshStandardMaterial",{color:h,roughness:.58})]})',
+        'b.jsx(cardinalAvatar.Head,{skin:h,tex:Lv(CARDINAL_FACE_URL,1,1,"high")})',
+    ),
+]
 
 
 AVATAR_MODERN = [
@@ -322,11 +413,11 @@ AVATAR_MODERN = [
         'f.jsx(cardinalAvatar.Hair,{hair:d,visual:u})',
     ),
     (
-        "avatar: face",
+        "avatar: drop geometric face (painted now)",
         'f.jsxs("mesh",{position:[-.11,1.99,-.322],children:[f.jsx("sphereGeometry",{args:[.048,8,8]}),f.jsx("meshBasicMaterial",{color:u.glow})]}),'
         'f.jsxs("mesh",{position:[.11,1.99,-.322],children:[f.jsx("sphereGeometry",{args:[.048,8,8]}),f.jsx("meshBasicMaterial",{color:u.glow})]}),'
         'f.jsxs("mesh",{position:[0,1.9,-.33],scale:[.06,.09,.05],children:[f.jsx("sphereGeometry",{args:[1,8,6]}),f.jsx("meshStandardMaterial",{color:"#bd7f6e",roughness:.7})]})',
-        'f.jsx(cardinalAvatar.Face,{visual:u,hair:d})',
+        'null',
     ),
     (
         "avatar: slimmer torso",
@@ -343,11 +434,11 @@ AVATAR_LEGACY = [
         'b.jsx(cardinalAvatar.Hair,{hair:d,visual:c})',
     ),
     (
-        "avatar: face",
+        "avatar: drop geometric face (painted now)",
         'b.jsxs("mesh",{position:[-.11,1.99,-.322],children:[b.jsx("sphereGeometry",{args:[.048,8,8]}),b.jsx("meshBasicMaterial",{color:c.glow})]}),'
         'b.jsxs("mesh",{position:[.11,1.99,-.322],children:[b.jsx("sphereGeometry",{args:[.048,8,8]}),b.jsx("meshBasicMaterial",{color:c.glow})]}),'
         'b.jsxs("mesh",{position:[0,1.9,-.33],scale:[.06,.09,.05],children:[b.jsx("sphereGeometry",{args:[1,8,6]}),b.jsx("meshStandardMaterial",{color:"#bd7f6e",roughness:.7})]})',
-        'b.jsx(cardinalAvatar.Face,{visual:c,hair:d})',
+        'null',
     ),
     (
         "avatar: slimmer torso",
@@ -364,8 +455,13 @@ WALL_LEGACY = [('city wall: tiers, chord width, gate opening', 'i="low"===t?5:10
 MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palette:i,city:!0,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),f.jsx(x_,{palette:i,city:!0,quality:e})'), ('mount place detail in the wild scene', 'f.jsx(x_,{palette:i,city:!1,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),f.jsx(x_,{palette:i,city:!1,quality:e})')]
 
 
+def _tex(patches):
+    face, plaza = face_texture_name(), plaza_decal_name()
+    return [(label, a, b.replace("{FACE}", face).replace("{PLAZA}", plaza)) for label, a, b in patches]
+
+
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + [
+    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + _tex(FACE_MODERN) + _tex(SIGIL_MODERN) + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
@@ -434,7 +530,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',

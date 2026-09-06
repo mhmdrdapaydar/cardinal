@@ -10,6 +10,8 @@ about a game rule, formula, reward, cost, cooldown or progression value.
 | File | Purpose |
 | --- | --- |
 | `build_graphics_release.py` | Applies the graphics patches to the shipped Vite build, appends `cardinal-fx.css`, re-hashes the bundles and rewires `index.html`. |
+| `make_avatar_face.py` | Paints the equirectangular face texture for the avatar's head sphere. |
+| `make_plaza_decal.py` | Paints the SAO-style system circle laid into the plaza floor. |
 | `cardinal-avatar.js` | Detailed avatar hair and face, as one ES5 factory shared by both bundles. Also holds an unused outfit layer, kept for reference. |
 | `cardinal-places.js` | Extra world geometry (outer district, rooftop details, lanterns, floating isles) as one ES5 factory shared by the modern and legacy bundles. |
 | `cardinal-fx.css` | The cinematic/HUD layer as readable, commented CSS. Edit this, not the minified stylesheet. |
