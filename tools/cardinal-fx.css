@@ -1052,3 +1052,77 @@ input:focus {
 .avatar-label--white  { box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 14px rgba(88, 217, 143, .3); }
 .avatar-label--orange { border-color: rgba(240, 162, 74, .6); box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 15px rgba(240, 162, 74, .34); }
 .avatar-label--red    { border-color: rgba(240, 85, 79, .65);  box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 16px rgba(240, 85, 79, .4); }
+
+/* ==========================================================================
+   14  teleport panel — an actual gate instead of an emoji
+   ==========================================================================
+   The build rendered a 🌀 glyph in a circle. This keeps the same single
+   element and builds the portal out of it: a spun conic swirl, two counter
+   rotating rune rings and a bright core. The glyph is hidden rather than
+   removed, so nothing in the component changes.
+   ========================================================================== */
+
+.portal-illustration {
+  position: relative;
+  height: 150px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: transparent;
+  font-size: 0;
+  text-shadow: none;
+  animation: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* swirl + core */
+.portal-illustration::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #eaf9ff 0%, rgba(150, 226, 255, .85) 9%, rgba(78, 178, 255, .35) 26%, transparent 58%),
+    conic-gradient(from 0deg,
+      rgba(122, 214, 255, 0) 0deg, rgba(122, 214, 255, .5) 34deg, rgba(122, 214, 255, 0) 72deg,
+      rgba(122, 214, 255, 0) 90deg, rgba(168, 232, 255, .42) 124deg, rgba(122, 214, 255, 0) 162deg,
+      rgba(122, 214, 255, 0) 180deg, rgba(122, 214, 255, .5) 214deg, rgba(122, 214, 255, 0) 252deg,
+      rgba(122, 214, 255, 0) 270deg, rgba(168, 232, 255, .42) 304deg, rgba(122, 214, 255, 0) 342deg);
+  -webkit-mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 78%);
+  mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 78%);
+  animation: fx-portal-spin 7s linear infinite;
+  filter: blur(.4px);
+}
+
+/* containment rings, counter rotating, with tick marks */
+.portal-illustration::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 148px;
+  height: 148px;
+  margin: -74px 0 0 -74px;
+  border-radius: 50%;
+  border: 1px solid rgba(150, 226, 255, .5);
+  background:
+    repeating-conic-gradient(from 0deg,
+      rgba(198, 240, 255, .75) 0deg 1.1deg, transparent 1.1deg 9deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 62%, #000 65%, #000 72%, transparent 75%);
+  mask-image: radial-gradient(circle, transparent 62%, #000 65%, #000 72%, transparent 75%);
+  animation: fx-portal-spin 19s linear infinite reverse;
+  box-shadow: 0 0 34px rgba(78, 178, 255, .3), inset 0 0 26px rgba(78, 178, 255, .22);
+}
+
+@keyframes fx-portal-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-illustration::before,
+  .portal-illustration::after { animation: none; }
+}

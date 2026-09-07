@@ -626,6 +626,91 @@ function cardinalMakePlaces(J, R, useFrame) {
     return J.jsxs("group", { ref: group, children: items });
   }
 
+  // ------------------------------------------------------- wild landmarks
+  // The wild movement clamp is radius 60, so anything past 61 is scenery the
+  // player can look at but never reach, and needs no collider. Wisps sit above
+  // head height for the same reason.
+  function WildCrystals(props) {
+    var palette = props.palette;
+    var count = props.count;
+    var group = R.useRef(null);
+    useFrame(function (state) {
+      if (!group.current) return;
+      var t = state.clock.elapsedTime;
+      var kids = group.current.children;
+      for (var i = 0; i < kids.length; i++) {
+        kids[i].rotation.y = t * (0.05 + rnd(i) * 0.06) * (i % 2 ? 1 : -1);
+      }
+    });
+    var items = [];
+    for (var i = 0; i < count; i++) {
+      var a = (i / count) * Math.PI * 2 + rnd(i + 13) * 0.5;
+      var r = 63 + rnd(i + 51) * 30;
+      var shards = [];
+      var n = 3 + Math.floor(rnd(i + 77) * 3);
+      for (var k = 0; k < n; k++) {
+        var h = 6 + rnd(i * 9 + k) * 13;
+        shards.push(J.jsxs("mesh", {
+          position: [(rnd(i + k) - 0.5) * 6, h * 0.42, (rnd(i + k + 40) - 0.5) * 6],
+          rotation: [(rnd(i + k + 3) - 0.5) * 0.5, rnd(i + k + 9) * 3, (rnd(i + k + 5) - 0.5) * 0.5],
+          children: [
+            J.jsx("coneGeometry", { args: [1.1 + rnd(i + k + 21) * 1.3, h, 5] }),
+            J.jsx("meshStandardMaterial", {
+              color: palette.crystal,
+              emissive: palette.crystal,
+              emissiveIntensity: 0.85,
+              roughness: 0.16,
+              metalness: 0.4,
+              transparent: true,
+              opacity: 0.86,
+              flatShading: true
+            })
+          ]
+        }, k));
+      }
+      items.push(J.jsxs("group", { position: [Math.cos(a) * r, -1, Math.sin(a) * r], children: shards }, i));
+    }
+    return J.jsxs("group", { ref: group, children: items });
+  }
+
+  function Wisps(props) {
+    var palette = props.palette;
+    var count = props.count;
+    var group = R.useRef(null);
+    useFrame(function (state) {
+      if (!group.current) return;
+      var t = state.clock.elapsedTime;
+      var kids = group.current.children;
+      for (var i = 0; i < kids.length; i++) {
+        var d = kids[i].userData;
+        kids[i].position.x = d.x + Math.sin(t * d.s + i) * 2.4;
+        kids[i].position.z = d.z + Math.cos(t * d.s * 0.8 + i) * 2.4;
+        kids[i].position.y = d.y + Math.sin(t * 0.7 + i * 1.3) * 0.7;
+      }
+    });
+    var items = [];
+    for (var i = 0; i < count; i++) {
+      var a = (i / count) * Math.PI * 2 + rnd(i + 5) * 1.2;
+      var r = 9 + rnd(i + 31) * 34;
+      var x = Math.cos(a) * r, z = Math.sin(a) * r, y = 3.2 + rnd(i + 61) * 3.4;
+      items.push(J.jsxs("mesh", {
+        position: [x, y, z],
+        userData: { x: x, z: z, y: y, s: 0.3 + rnd(i + 7) * 0.35 },
+        children: [
+          J.jsx("sphereGeometry", { args: [0.14 + rnd(i + 17) * 0.1, 7, 6] }),
+          J.jsx("meshStandardMaterial", {
+            color: "#ffffff",
+            emissive: i % 3 === 0 ? palette.accent : palette.crystal,
+            emissiveIntensity: 2.6,
+            roughness: 0.3,
+            toneMapped: false
+          })
+        ]
+      }, i));
+    }
+    return J.jsxs("group", { ref: group, children: items });
+  }
+
   // --------------------------------------------------------------- entrypoint
   return function CardinalPlaces(props) {
     var quality = props.quality;
@@ -651,9 +736,102 @@ function cardinalMakePlaces(J, R, useFrame) {
       children.push(J.jsx(SkyLanterns, { palette: palette, count: tier(quality, 16, 8, 0) }, "lan"));
       children.push(J.jsx(Monoliths, { palette: palette, count: tier(quality, 9, 5, 0) }, "mon"));
     } else {
+      children.push(J.jsx(WildCrystals, { palette: palette, count: tier(quality, 9, 6, 0) }, "cry"));
+      children.push(J.jsx(Wisps, { palette: palette, count: tier(quality, 26, 14, 0) }, "wisp"));
       children.push(J.jsx(FloatingIsles, { palette: palette, count: tier(quality, 7, 4, 0) }, "isl"));
       children.push(J.jsx(Monoliths, { palette: palette, count: tier(quality, 6, 3, 0) }, "mon"));
     }
     return J.jsxs("group", { children: children });
+  };
+}
+
+
+/**
+ * Teleport gate — a second factory in this file so the shrine can be upgraded
+ * without touching the places entrypoint. Same ES5 rules apply.
+ *
+ * Everything is above the existing shrine dais and inside its footprint, which
+ * already has a collider, so nothing new is walkable-through.
+ */
+function cardinalMakePortal(J, R, useFrame) {
+  return function TeleportGate(props) {
+    var palette = props.palette;
+    var tex = props.tex;
+    var quality = props.quality;
+    var disc = R.useRef(null);
+    var runes = R.useRef(null);
+    var beam = R.useRef(null);
+
+    useFrame(function (state) {
+      var t = state.clock.elapsedTime;
+      if (disc.current) {
+        disc.current.rotation.z = -t * 0.42;
+        var pulse = 0.94 + Math.sin(t * 1.6) * 0.05;
+        disc.current.scale.set(pulse, pulse, 1);
+      }
+      if (runes.current) runes.current.rotation.y = t * 0.33;
+      if (beam.current) beam.current.material.opacity = 0.13 + Math.sin(t * 2.1) * 0.05;
+    });
+
+    var runePlates = [];
+    for (var i = 0; i < 6; i++) {
+      var a = (i / 6) * Math.PI * 2;
+      runePlates.push(J.jsxs("mesh", {
+        position: [Math.cos(a) * 2.75, 2.5 + Math.sin(a * 2) * 0.45, Math.sin(a) * 2.75],
+        rotation: [0, -a, 0.18],
+        children: [
+          J.jsx("boxGeometry", { args: [0.42, 0.62, 0.06] }),
+          J.jsx("meshStandardMaterial", {
+            color: palette.accentSoft,
+            emissive: palette.accentSoft,
+            emissiveIntensity: 1.5,
+            metalness: 0.65,
+            roughness: 0.2
+          })
+        ]
+      }, i));
+    }
+
+    return J.jsxs("group", { position: [0, 0, 0], rotation: [0, 0.244, 0], children: [
+      // gate arch
+      J.jsxs("mesh", {
+        castShadow: quality === "high",
+        position: [0, 2.75, 0],
+        children: [
+          J.jsx("torusGeometry", { args: [2.15, 0.17, 8, 30] }),
+          J.jsx("meshStandardMaterial", {
+            color: "#7d90ab", emissive: palette.accentSoft,
+            emissiveIntensity: 0.35, metalness: 0.7, roughness: 0.24
+          })
+        ]
+      }, "arch"),
+      // the swirl itself, additive so it reads as light not plastic
+      J.jsxs("mesh", {
+        ref: disc,
+        position: [0, 2.75, 0],
+        children: [
+          J.jsx("circleGeometry", { args: [2.02, 40] }),
+          J.jsx("meshBasicMaterial", {
+            map: tex, transparent: true, opacity: 0.92,
+            depthWrite: false, blending: 2, side: 2, toneMapped: false
+          })
+        ]
+      }, "swirl"),
+      // beam of light rising out of the gate
+      J.jsxs("mesh", {
+        ref: beam,
+        position: [0, 7.5, 0],
+        children: [
+          J.jsx("cylinderGeometry", { args: [1.5, 2.0, 11, 14, 1, true] }),
+          J.jsx("meshBasicMaterial", {
+            color: palette.accentSoft, transparent: true, opacity: 0.15,
+            depthWrite: false, blending: 2, side: 2, toneMapped: false
+          })
+        ]
+      }, "beam"),
+      J.jsxs("group", { ref: runes, children: runePlates }, "runes"),
+      J.jsx("pointLight", { color: palette.accentSoft, intensity: quality === "low" ? 1.4 : 3.1,
+                            distance: 12, position: [0, 2.9, 0] })
+    ] });
   };
 }

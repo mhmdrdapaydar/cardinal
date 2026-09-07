@@ -169,7 +169,9 @@ PLACES_SOURCE = (ROOT / "tools" / "cardinal-places.js").read_text(encoding="utf-
 
 
 def places_installer(jsx: str, react: str, use_frame: str) -> str:
-    return PLACES_SOURCE + f"\nvar cardinalPlaces=cardinalMakePlaces({jsx},{react},{use_frame});\n"
+    return (PLACES_SOURCE
+            + f"\nvar cardinalPlaces=cardinalMakePlaces({jsx},{react},{use_frame});"
+            + f"\nvar cardinalPortal=cardinalMakePortal({jsx},{react},{use_frame});\n")
 
 
 def cel_installer(material_class: str) -> str:
@@ -317,6 +319,14 @@ LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palet
 # ones did. Filename carries a content hash; it is discovered rather than
 # hardcoded so regenerating the texture does not need a code edit.
 # --------------------------------------------------------------------------
+def portal_texture_name() -> str:
+    found = sorted(ASSETS.glob("cardinal-portal-*.png"))
+    if len(found) != 1:
+        sys.exit(f"ABORT: expected exactly one cardinal-portal-*.png in assets/, found {len(found)}."
+                 " Run: python3 tools/make_portal_texture.py")
+    return found[0].name
+
+
 def plaza_decal_name() -> str:
     found = sorted(ASSETS.glob("cardinal-plaza-*.png"))
     if len(found) != 1:
@@ -379,6 +389,38 @@ SIGIL_LEGACY = [
 # Remote players and the SAO colour cursor. `em`/`i0` is the drei Html helper
 # the build already uses for the self label, and Ix/Ov is its class-visual
 # table; both are passed in rather than re-created.
+# The teleport shrine gains a gate arch, a swirling disc and a light column.
+# Everything sits above the existing dais, inside a footprint that already has
+# a collider.
+GATE_MODERN = [
+    (
+        "portal texture: url constant",
+        'CARDINAL_PLAZA_URL=""+new URL(',
+        'CARDINAL_PORTAL_URL=""+new URL("' + "{PORTAL}" + '",import.meta.url).href,CARDINAL_PLAZA_URL=""+new URL(',
+    ),
+    (
+        "teleport shrine: gate, swirl and beam",
+        'f.jsx("pointLight",{color:e.accentSoft,intensity:t==="low"?1.1:2.5,distance:7.5,position:[0,1.45,0]})',
+        'f.jsx(cardinalPortal,{palette:e,quality:t,tex:Wt(CARDINAL_PORTAL_URL,1,1,t)}),'
+        'f.jsx("pointLight",{color:e.accentSoft,intensity:t==="low"?1.1:2.5,distance:7.5,position:[0,1.45,0]})',
+    ),
+]
+
+GATE_LEGACY = [
+    (
+        "portal texture: url constant",
+        'CARDINAL_PLAZA_URL=""+new URL(',
+        'CARDINAL_PORTAL_URL=""+new URL("' + "{PORTAL}" + '",v.meta.url).href,CARDINAL_PLAZA_URL=""+new URL(',
+    ),
+    (
+        "teleport shrine: gate, swirl and beam",
+        'b.jsx("pointLight",{color:n.accentSoft,intensity:"low"===r?1.1:2.5,distance:7.5,position:[0,1.45,0]})',
+        'b.jsx(cardinalPortal,{palette:n,quality:r,tex:Lv(CARDINAL_PORTAL_URL,1,1,r)}),'
+        'b.jsx("pointLight",{color:n.accentSoft,intensity:"low"===r?1.1:2.5,distance:7.5,position:[0,1.45,0]})',
+    ),
+]
+
+
 PEERS_MODERN = [
     (
         "peers: mounted in the city scene",
@@ -503,11 +545,13 @@ MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palet
 
 def _tex(patches):
     face, plaza = face_texture_name(), plaza_decal_name()
-    return [(label, a, b.replace("{FACE}", face).replace("{PLAZA}", plaza)) for label, a, b in patches]
+    portal = portal_texture_name()
+    return [(label, a, b.replace("{FACE}", face).replace("{PLAZA}", plaza).replace("{PORTAL}", portal))
+            for label, a, b in patches]
 
 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + _tex(FACE_MODERN) + _tex(SIGIL_MODERN) + _tex(PEERS_MODERN) + [
+    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + _tex(FACE_MODERN) + _tex(SIGIL_MODERN) + _tex(PEERS_MODERN) + _tex(GATE_MODERN) + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
@@ -576,7 +620,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + _tex(PEERS_LEGACY) + [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + _tex(PEERS_LEGACY) + _tex(GATE_LEGACY) + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',

@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260907-online-1`
+## Release `20260907-online-2`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -65,6 +65,8 @@ Presentation only, and unchanged in intent from the previous releases.
 
 What changed in the rendered world:
 
+- **Teleport gate.** The shrine was a stone dais with four spinning cones. It now stands under a gate arch holding a swirling portal disc (`tools/make_portal_texture.py`: spiral arms, a rune ring and a bright core, blended additively), with a column of light rising out of it and six rune plates orbiting. The panel matched: its 🌀 glyph is replaced by a portal built from a conic-gradient swirl and two counter-rotating tick rings, using the same single element so the component is untouched.
+- **Wild realm.** Crystal formations rise past the movement clamp at radius 63-93, and spirit wisps drift above head height. Both sit where the player cannot reach them, so neither needs a collider.
 - **Painted face.** Anime games paint faces rather than model them, and that is the only way to get readable eyes at this size. The head is a plain `SphereGeometry`, so its UVs are equirectangular and the mapping is exact: the character faces -Z, which is `u = 0.75`, and every feature row is derived from the world-space heights the build already used for the geometric eyes. `tools/make_avatar_face.py` paints skin shading, blush, eyes with sclera/iris/catch light/lash line, brows, a soft nose shadow and a mouth into a 1024x512 texture. The geometric eyes are removed.
 - **Plaza system circle.** The camera sits 23 degrees below horizontal with a 46 degree vertical FOV, so the horizon lands almost exactly on the top edge of the frame and the sky is effectively never on screen — which is why an Aincrad-style sky castle was not worth building. The plaza floor, on the other hand, fills the view, so `tools/make_plaza_decal.py` paints a Sword Art Online style system circle — concentric rules, tick marks, gate markers, a rotated square lattice and rune blocks — laid flat on the cobblestones with additive blending. The city ground is exactly flat inside radius 31, so it cannot z-fight.
 - **Avatar hair.** The head was a squashed hemisphere with three blobs for hair and two glowing spheres for eyes. The hair is a bob built from tapered locks — swept bangs, side locks along the cheek, a ponytail with secondary motion that lags the body, a painted sheen band and an ornament. The face has eyes with sclera, iris, a specular catch light and a lash line, plus brows, nose and mouth. The limb groups the walk cycle drives, the body capsule, the ground shadow, the label height and the point light are untouched, so the animation and the avatar's footprint are unchanged. Note the scale this is seen at: at the shipped camera the head is roughly 25 pixels tall, so the silhouette is what reads in play, not the face.
@@ -101,7 +103,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260907-online-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260907-online-2.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 
