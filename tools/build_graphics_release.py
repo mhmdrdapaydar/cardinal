@@ -335,12 +335,14 @@ def plaza_decal_name() -> str:
     return found[0].name
 
 
-def face_texture_name() -> str:
-    found = sorted(ASSETS.glob("cardinal-face-*.png"))
-    if len(found) != 1:
-        sys.exit(f"ABORT: expected exactly one cardinal-face-*.png in assets/, found {len(found)}."
+def face_texture_names() -> tuple[str, str]:
+    male = sorted(ASSETS.glob("cardinal-face-m-*.png"))
+    female = sorted(ASSETS.glob("cardinal-face-f-*.png"))
+    if len(male) != 1 or len(female) != 1:
+        sys.exit("ABORT: expected exactly one cardinal-face-m-*.png and one cardinal-face-f-*.png"
+                 f" in assets/, found {len(male)} and {len(female)}."
                  " Run: python3 tools/make_avatar_face.py")
-    return found[0].name
+    return male[0].name, female[0].name
 
 AVATAR_SOURCE = (ROOT / "tools" / "cardinal-avatar.js").read_text(encoding="utf-8")
 
@@ -356,8 +358,8 @@ def avatar_installer(jsx: str, react: str, use_frame: str) -> str:
 SIGIL_MODERN = [
     (
         "plaza sigil: url constant",
-        'CARDINAL_FACE_URL=""+new URL(',
-        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",import.meta.url).href,CARDINAL_FACE_URL=""+new URL(',
+        'CARDINAL_FACE_M=""+new URL(',
+        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",import.meta.url).href,CARDINAL_FACE_M=""+new URL(',
     ),
     (
         "plaza sigil: laid into the plaza",
@@ -372,8 +374,8 @@ SIGIL_MODERN = [
 SIGIL_LEGACY = [
     (
         "plaza sigil: url constant",
-        'CARDINAL_FACE_URL=""+new URL(',
-        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",v.meta.url).href,CARDINAL_FACE_URL=""+new URL(',
+        'CARDINAL_FACE_M=""+new URL(',
+        'CARDINAL_PLAZA_URL=""+new URL("' + "{PLAZA}" + '",v.meta.url).href,CARDINAL_FACE_M=""+new URL(',
     ),
     (
         "plaza sigil: laid into the plaza",
@@ -426,13 +428,13 @@ PEERS_MODERN = [
         "peers: mounted in the city scene",
         'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0})',
         'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),'
-        'f.jsx(cardinalAvatar.Peers,{tex:Wt(CARDINAL_FACE_URL,1,1,"high"),colours:Ix,label:em,max:e==="low"?8:20})',
+        'f.jsx(cardinalAvatar.Peers,{texM:Wt(CARDINAL_FACE_M,1,1,"high"),texF:Wt(CARDINAL_FACE_F,1,1,"high"),colours:Ix,label:em,max:e==="high"?14:e==="balanced"?8:4})',
     ),
     (
         "peers: mounted in the wild scene",
         'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1})',
         'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),'
-        'f.jsx(cardinalAvatar.Peers,{tex:Wt(CARDINAL_FACE_URL,1,1,"high"),colours:Ix,label:em,max:e==="low"?8:20})',
+        'f.jsx(cardinalAvatar.Peers,{texM:Wt(CARDINAL_FACE_M,1,1,"high"),texF:Wt(CARDINAL_FACE_F,1,1,"high"),colours:Ix,label:em,max:e==="high"?14:e==="balanced"?8:4})',
     ),
     (
         "own colour cursor above the head",
@@ -447,13 +449,13 @@ PEERS_LEGACY = [
         "peers: mounted in the city scene",
         'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0})',
         'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),'
-        'b.jsx(cardinalAvatar.Peers,{tex:Lv(CARDINAL_FACE_URL,1,1,"high"),colours:xv,label:Jm,max:"low"===n?8:20})',
+        'b.jsx(cardinalAvatar.Peers,{texM:Lv(CARDINAL_FACE_M,1,1,"high"),texF:Lv(CARDINAL_FACE_F,1,1,"high"),colours:xv,label:Jm,max:"high"===n?14:"balanced"===n?8:4})',
     ),
     (
         "peers: mounted in the wild scene",
         'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1})',
         'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),'
-        'b.jsx(cardinalAvatar.Peers,{tex:Lv(CARDINAL_FACE_URL,1,1,"high"),colours:xv,label:Jm,max:"low"===n?8:20})',
+        'b.jsx(cardinalAvatar.Peers,{texM:Lv(CARDINAL_FACE_M,1,1,"high"),texF:Lv(CARDINAL_FACE_F,1,1,"high"),colours:xv,label:Jm,max:"high"===n?14:"balanced"===n?8:4})',
     ),
     (
         "own colour cursor above the head",
@@ -468,13 +470,14 @@ FACE_MODERN = [
     (
         "face texture: url constant",
         'tm=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",import.meta.url).href',
-        'CARDINAL_FACE_URL=""+new URL("' + "{FACE}" + '",import.meta.url).href,'
+        'CARDINAL_FACE_M=""+new URL("' + "{FACE_M}" + '",import.meta.url).href,'
+        'CARDINAL_FACE_F=""+new URL("' + "{FACE_F}" + '",import.meta.url).href,'
         'tm=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",import.meta.url).href',
     ),
     (
         "face texture: applied to the head",
         'f.jsxs("mesh",{castShadow:!0,position:[0,1.98,0],children:[f.jsx("sphereGeometry",{args:[.34,20,16]}),f.jsx("meshStandardMaterial",{color:h,roughness:.58})]})',
-        'f.jsx(cardinalAvatar.Head,{skin:h,tex:Wt(CARDINAL_FACE_URL,1,1,"high")})',
+        'f.jsx(cardinalAvatar.Head,{skin:h,tex:Wt(r.gender==="female"?CARDINAL_FACE_F:CARDINAL_FACE_M,1,1,"high")})',
     ),
 ]
 
@@ -482,13 +485,14 @@ FACE_LEGACY = [
     (
         "face texture: url constant",
         'iv=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",v.meta.url).href',
-        'CARDINAL_FACE_URL=""+new URL("' + "{FACE}" + '",v.meta.url).href,'
+        'CARDINAL_FACE_M=""+new URL("' + "{FACE_M}" + '",v.meta.url).href,'
+        'CARDINAL_FACE_F=""+new URL("' + "{FACE_F}" + '",v.meta.url).href,'
         'iv=""+new URL("cobblestone-plaza-Bv05-kDx.jpg",v.meta.url).href',
     ),
     (
         "face texture: applied to the head",
         'b.jsxs("mesh",{castShadow:!0,position:[0,1.98,0],children:[b.jsx("sphereGeometry",{args:[.34,20,16]}),b.jsx("meshStandardMaterial",{color:h,roughness:.58})]})',
-        'b.jsx(cardinalAvatar.Head,{skin:h,tex:Lv(CARDINAL_FACE_URL,1,1,"high")})',
+        'b.jsx(cardinalAvatar.Head,{skin:h,tex:Lv("female"===n.gender?CARDINAL_FACE_F:CARDINAL_FACE_M,1,1,"high")})',
     ),
 ]
 
@@ -544,9 +548,11 @@ MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palet
 
 
 def _tex(patches):
-    face, plaza = face_texture_name(), plaza_decal_name()
+    face_m, face_f = face_texture_names()
+    plaza = plaza_decal_name()
     portal = portal_texture_name()
-    return [(label, a, b.replace("{FACE}", face).replace("{PLAZA}", plaza).replace("{PORTAL}", portal))
+    return [(label, a, b.replace("{FACE_M}", face_m).replace("{FACE_F}", face_f)
+                        .replace("{PLAZA}", plaza).replace("{PORTAL}", portal))
             for label, a, b in patches]
 
 

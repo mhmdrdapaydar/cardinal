@@ -165,9 +165,9 @@ function rtHandle(url, method, body, res) {
     rt.presence.set(me, { ...b, id: me, seen: now });
     // two synthetic neighbours so the roster and the 3D layer have something
     // to draw while developing
-    rt.presence.set(900001, { id: 900001, name: "آسونا", classId: 2, pkStatus: "orange",
+    rt.presence.set(900001, { id: 900001, name: "آسونا", classId: 2, pkStatus: "orange", gender: "female",
       floor: b.floor, location: b.location, x: 4.5, z: -3.2, yaw: 0.8, moving: false, seen: now });
-    rt.presence.set(900002, { id: 900002, name: "کلاین", classId: 3, pkStatus: "red",
+    rt.presence.set(900002, { id: 900002, name: "کلاین", classId: 3, pkStatus: "red", gender: "male",
       floor: b.floor, location: b.location,
       x: Math.sin(Date.now() / 2400) * 7, z: 5 + Math.cos(Date.now() / 2400) * 7,
       yaw: Date.now() / 1600 % 6.28, moving: true, seen: now });
@@ -175,7 +175,7 @@ function rtHandle(url, method, body, res) {
     return ok({
       players: room.filter((p) => p.id !== me).map((p) => ({
         id: p.id, name: p.name, classId: p.classId, pkStatus: p.pkStatus,
-        x: p.x, z: p.z, yaw: p.yaw, moving: !!p.moving, idle: 0 })),
+        gender: p.gender || "male", x: p.x, z: p.z, yaw: p.yaw, moving: !!p.moving, idle: 0 })),
       room: { location: b.location, floor: b.floor },
       lobby: 1, lobbies: 1, inRoom: room.length, online: rt.presence.size, ttl: 60,
     });

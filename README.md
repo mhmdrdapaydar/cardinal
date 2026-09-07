@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260907-online-3`
+## Release `20260907-online-4`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -49,6 +49,8 @@ New, and **kept completely off the game database** as asked.
 
 The only thing it borrows from the game is identity: the player id already on the PHP session. Everything the client reports — name, class, cursor colour, position — is treated as untrusted decoration, sanitised and clamped, exactly like the non-authoritative avatar layer this package documents.
 
+- **Other players are drawn properly.** A remote avatar is not a stand-in any more: legs with boots, a torso in the class cloak colour, a belt, shoulder guards, arms with hands, a cape, a painted face and layered hair — and the same walk cycle the local avatar uses, driven by the reported moving flag, so someone walking past does not read as a different species. Counts are capped per tier (14 / 8 / 4) because a lobby holds up to 50.
+- **Characters differ by gender.** `gender` rides along with presence and selects both the face texture and the hair. Two faces are painted rather than one: the feminine variant has larger, rounder eyes, a heavier lash, a thin arched brow and more blush; the masculine one has narrower eyes and a straighter, thicker brow. The player's own head picks the same way.
 - **Players see each other.** Anyone on the same floor *and* the same side of the gate is in the same room. Position, heading and a moving flag are exchanged about once a second, and each remote avatar interpolates toward its target every frame, so movement reads as walking rather than teleporting.
 - **A player who stops sending heartbeats disappears after 60 seconds**, and the heartbeat stops as soon as the tab is hidden, so a backgrounded browser does not leave a ghost standing in the plaza.
 - **Rooms split into lobbies of 50.** The split is a stable slice, so the same people stay together between polls instead of reshuffling.
@@ -106,7 +108,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260907-online-3.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260907-online-4.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

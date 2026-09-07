@@ -170,6 +170,7 @@ function rt_db(): PDO
         name       TEXT    NOT NULL,
         class_id   INTEGER NOT NULL DEFAULT 1,
         pk_status  TEXT    NOT NULL DEFAULT \'white\',
+        gender     TEXT    NOT NULL DEFAULT \'male\',
         floor      INTEGER NOT NULL DEFAULT 1,
         location   TEXT    NOT NULL DEFAULT \'city\',
         x          REAL    NOT NULL DEFAULT 0,
@@ -179,6 +180,16 @@ function rt_db(): PDO
         seen_at    INTEGER NOT NULL
     )');
     $pdo->exec('CREATE INDEX IF NOT EXISTS presence_room ON presence (location, floor, seen_at)');
+
+    // A file created before gender existed must not be thrown away, so add the
+    // column in place. SQLite has no IF NOT EXISTS for ALTER, hence the probe.
+    $columns = [];
+    foreach ($pdo->query('PRAGMA table_info(presence)') as $column) {
+        $columns[] = $column['name'];
+    }
+    if (!in_array('gender', $columns, true)) {
+        $pdo->exec("ALTER TABLE presence ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
+    }
     $pdo->exec('CREATE TABLE IF NOT EXISTS chat (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         player_id  INTEGER NOT NULL,
@@ -234,6 +245,7 @@ if ($route === 'sync') {
     $name = rt_text($in['name'] ?? null, 32, 'بازیکن');
     $classId = rt_int($in['classId'] ?? null, 1, 20, 1);
     $pk = rt_pk(rt_text($in['pkStatus'] ?? null, 10, 'white'));
+    $gender = (($in['gender'] ?? 'male') === 'female') ? 'female' : 'male';
     $floor = rt_int($in['floor'] ?? null, 1, 200, 1);
     $location = (($in['location'] ?? 'city') === 'wild') ? 'wild' : 'city';
     // The world clamps the avatar to 33.25 in the city and 60 in the wild;
@@ -257,14 +269,14 @@ if ($route === 'sync') {
     }
 
     $db->prepare('INSERT INTO presence
-            (player_id, name, class_id, pk_status, floor, location, x, z, yaw, moving, seen_at)
-         VALUES (:p, :n, :c, :k, :f, :l, :x, :z, :y, :m, :t)
+            (player_id, name, class_id, pk_status, gender, floor, location, x, z, yaw, moving, seen_at)
+         VALUES (:p, :n, :c, :k, :g, :f, :l, :x, :z, :y, :m, :t)
          ON CONFLICT(player_id) DO UPDATE SET
-            name = :n, class_id = :c, pk_status = :k, floor = :f, location = :l,
+            name = :n, class_id = :c, pk_status = :k, gender = :g, floor = :f, location = :l,
             x = :x, z = :z, yaw = :y, moving = :m, seen_at = :t')
        ->execute([
             ':p' => $playerId, ':n' => $name, ':c' => $classId, ':k' => $pk,
-            ':f' => $floor, ':l' => $location, ':x' => $x, ':z' => $z,
+            ':g' => $gender, ':f' => $floor, ':l' => $location, ':x' => $x, ':z' => $z,
             ':y' => $yaw, ':m' => $moving, ':t' => $now,
        ]);
 
@@ -275,7 +287,7 @@ if ($route === 'sync') {
     }
 
     $cut = $now - RT_PRESENCE_TTL;
-    $rows = $db->prepare('SELECT player_id, name, class_id, pk_status, x, z, yaw, moving, seen_at
+    $rows = $db->prepare('SELECT player_id, name, class_id, pk_status, gender, x, z, yaw, moving, seen_at
                           FROM presence
                           WHERE location = :l AND floor = :f AND seen_at >= :cut
                           ORDER BY player_id ASC');
@@ -299,6 +311,7 @@ if ($route === 'sync') {
             'name' => (string) $row['name'],
             'classId' => (int) $row['class_id'],
             'pkStatus' => (string) $row['pk_status'],
+            'gender' => (string) $row['gender'],
             'x' => round((float) $row['x'], 3),
             'z' => round((float) $row['z'], 3),
             'yaw' => round((float) $row['yaw'], 3),

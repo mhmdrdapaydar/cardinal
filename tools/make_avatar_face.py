@@ -53,13 +53,33 @@ SS = 4                      # supersample factor
 FACE_U = 0.75               # -Z
 HEAD_Y, HEAD_R = 1.98, 0.34
 
-SKIN = (247, 218, 200)
-SKIN_SHADE = (226, 186, 168)
-BLUSH = (240, 168, 158)
-LASH = (46, 38, 52)
-BROW = (58, 46, 62)
+# Anime faces are read almost entirely through the eyes and brows, so that is
+# where the two variants differ: the feminine face gets larger, rounder eyes
+# with a heavier lash and a thin arched brow; the masculine one gets narrower
+# eyes, a straighter, thicker brow and much less blush.
+LOOKS = {
+    # The masculine entry is the exact set of numbers the single face was
+    # tuned with; the feminine one is a small delta from it. Deriving the lash
+    # position from the eye height instead of pinning it, as a first attempt
+    # did, slid the lash into the brow and left the eyes looking bare.
+    "male": {
+        "skin": (247, 218, 200), "shade": (226, 186, 168), "blush": (240, 168, 158),
+        "lash": (46, 38, 52), "brow": (58, 46, 62), "mouth": (176, 96, 92),
+        "eye_w": 30.0, "eye_h": 34.0, "iris_w": 20.0, "iris_h": 27.0,
+        "lash_y": 30.0, "lash_top": 5.0, "lash_grow": 7.0, "flick": 20.0,
+        "brow_len": 66.0, "brow_thick": 5.6, "brow_taper": 3.4, "brow_arch": 7.0,
+        "blush_a": 0.2, "mouth_w": 34.0,
+    },
+    "female": {
+        "skin": (251, 224, 211), "shade": (232, 193, 179), "blush": (243, 166, 162),
+        "lash": (44, 34, 52), "brow": (78, 58, 72), "mouth": (194, 108, 108),
+        "eye_w": 32.0, "eye_h": 37.0, "iris_w": 22.0, "iris_h": 30.0,
+        "lash_y": 32.5, "lash_top": 5.8, "lash_grow": 8.6, "flick": 25.0,
+        "brow_len": 57.0, "brow_thick": 4.2, "brow_taper": 2.7, "brow_arch": 10.0,
+        "blush_a": 0.34, "mouth_w": 30.0,
+    },
+}
 SCLERA = (252, 253, 255)
-MOUTH = (176, 96, 92)
 
 
 def row_for(world_y: float) -> float:
@@ -87,12 +107,17 @@ def ellipse(d: ImageDraw.ImageDraw, cx, cy, rx, ry, fill, rot=0.0):
     d.polygon(pts, fill=fill)
 
 
-def build() -> Image.Image:
+def build(gender: str = "male") -> Image.Image:
+    L = LOOKS[gender]
+    SKIN, SKIN_SHADE, BLUSH = L["skin"], L["shade"], L["blush"]
+    LASH, BROW, MOUTH = L["lash"], L["brow"], L["mouth"]
     img = Image.new("RGB", (W * SS, H * SS), SKIN)
     d = ImageDraw.Draw(img)
     s = SS
 
-    brow_row = row_for(2.088) * s
+    # a little above the anatomical row so the brow and the lash read as two
+    # separate strokes rather than one thick bar at gameplay distance
+    brow_row = (row_for(2.088) - 9) * s
     eye_row = row_for(1.995) * s
     mouth_row = row_for(1.868) * s
     nose_row = row_for(1.925) * s
@@ -113,7 +138,7 @@ def build() -> Image.Image:
         bx = col_for(side * 0.175, eye_row / s) * s
         ellipse(bd, bx, eye_row + 34 * s, 34 * s, 20 * s, BLUSH)
     blush = blush.filter(ImageFilter.GaussianBlur(22 * s / 2))
-    img = Image.composite(Image.blend(img, Image.new("RGB", img.size, BLUSH), 0.24), img,
+    img = Image.composite(Image.blend(img, Image.new("RGB", img.size, BLUSH), L["blush_a"]), img,
                           blush.convert("L").point(lambda v: min(255, int(v * 1.9))))
     d = ImageDraw.Draw(img)
 
@@ -122,7 +147,7 @@ def build() -> Image.Image:
         tilt = side * 0.1
 
         # ---- eye: sclera, iris, pupil, catch light, heavy upper lash
-        ellipse(d, ex, eye_row, 30 * s, 34 * s, SCLERA, tilt)
+        ellipse(d, ex, eye_row, L["eye_w"] * s, L["eye_h"] * s, SCLERA, tilt)
         # iris: a vertical gradient from the class colour into a darker rim
         for k in range(18, 0, -1):
             t = k / 18
@@ -131,37 +156,37 @@ def build() -> Image.Image:
                 int(170 + 70 * (1 - t)),
                 int(226 + 29 * (1 - t)),
             )
-            ellipse(d, ex, eye_row + 2 * s, 20 * s * t, 27 * s * t, col, tilt)
-        ellipse(d, ex, eye_row + 5 * s, 9 * s, 13 * s, (28, 34, 62), tilt)
+            ellipse(d, ex, eye_row + 2 * s, L["iris_w"] * s * t, L["iris_h"] * s * t, col, tilt)
+        ellipse(d, ex, eye_row + 5 * s, L["iris_w"] * 0.45 * s, L["iris_h"] * 0.48 * s, (28, 34, 62), tilt)
         # catch light, high and off-centre like a painted highlight
         ellipse(d, ex - side * 7 * s, eye_row - 13 * s, 7 * s, 8 * s, (255, 255, 255), tilt)
         ellipse(d, ex + side * 8 * s, eye_row + 12 * s, 4 * s, 4 * s, (210, 240, 255), tilt)
         # upper lash line, thick at the outer corner
-        for i in range(26):
-            t = i / 25
+        for i in range(52):
+            t = i / 51
             lx = ex + (t - 0.5) * 62 * s * (1 if side > 0 else -1)
-            thick = (5.0 + 7.0 * t) * s
-            ly = eye_row - 30 * s + math.sin(t * math.pi) * -6 * s + t * 5 * s
+            thick = (L["lash_top"] + L["lash_grow"] * t) * s
+            ly = eye_row - L["lash_y"] * s + math.sin(t * math.pi) * -6 * s + t * 5 * s
             d.ellipse([lx - thick, ly - thick * 0.8, lx + thick, ly + thick * 0.8], fill=LASH)
         # outer lash flick
         fx = ex + side * 34 * s
-        d.polygon([(fx, eye_row - 26 * s), (fx + side * 20 * s, eye_row - 40 * s),
+        d.polygon([(fx, eye_row - 26 * s), (fx + side * L["flick"] * s, eye_row - 40 * s),
                    (fx + side * 3 * s, eye_row - 20 * s)], fill=LASH)
         # lower lid: one continuous stroke, or it beads into a dotted line
         lid = []
         for i in range(25):
             t = i / 24
             lid.append((ex + (t - 0.5) * 50 * s * (1 if side > 0 else -1),
-                        eye_row + 31 * s - math.sin(t * math.pi) * 3 * s))
+                        eye_row + (L["eye_h"] - 3) * s - math.sin(t * math.pi) * 3 * s))
         d.line(lid, fill=(126, 100, 114), width=int(3.4 * s), joint="curve")
 
         # ---- brow: tapered stroke, arched
         bx = col_for(side * 0.125, brow_row / s) * s
-        for i in range(20):
-            t = i / 19
-            px = bx + (t - 0.5) * 66 * s * (1 if side > 0 else -1)
-            py = brow_row - math.sin(t * math.pi) * 7 * s + t * 4 * s
-            thick = (5.6 - 3.4 * t) * s
+        for i in range(46):
+            t = i / 45
+            px = bx + (t - 0.5) * L["brow_len"] * s * (1 if side > 0 else -1)
+            py = brow_row - math.sin(t * math.pi) * L["brow_arch"] * s + t * 4 * s
+            thick = (L["brow_thick"] - L["brow_taper"] * t) * s
             d.ellipse([px - thick, py - thick * 0.55, px + thick, py + thick * 0.55], fill=BROW)
 
     # ---- nose: a soft shadow wedge, no outline
@@ -177,7 +202,7 @@ def build() -> Image.Image:
     pts = []
     for i in range(21):
         t = i / 20
-        pts.append((face_cx + (t - 0.5) * 34 * s, mouth_row + math.sin(t * math.pi) * 5 * s))
+        pts.append((face_cx + (t - 0.5) * L["mouth_w"] * s, mouth_row + math.sin(t * math.pi) * 5 * s))
     for i in range(20):
         x0, y0 = pts[i]
         x1, y1 = pts[i + 1]
@@ -193,25 +218,29 @@ def main() -> int:
     ap.add_argument("--preview", action="store_true", help="also write tools/preview/face-texture.png")
     args = ap.parse_args()
 
-    img = build()
-    digest = hashlib.sha256(img.tobytes()).hexdigest()[:8]
-    name = f"cardinal-face-{digest}.png"
-
     ASSETS.mkdir(exist_ok=True)
     for stale in ASSETS.glob("cardinal-face-*.png"):
         stale.unlink()
-    out = ASSETS / name
-    img.save(out, "PNG", optimize=True)
-    print(f"{out.relative_to(ROOT)}  {W}x{H}  {out.stat().st_size // 1024} KB")
+
+    crops = []
+    for gender, tag in (("male", "m"), ("female", "f")):
+        img = build(gender)
+        digest = hashlib.sha256(img.tobytes()).hexdigest()[:8]
+        out = ASSETS / f"cardinal-face-{tag}-{digest}.png"
+        img.save(out, "PNG", optimize=True)
+        print(f"{out.relative_to(ROOT)}  {W}x{H}  {out.stat().st_size // 1024} KB")
+        crops.append(img.crop((int(W * 0.62), int(H * 0.22), int(W * 0.88), int(H * 0.78))))
 
     if args.preview:
         pv = ROOT / "tools" / "preview"
         pv.mkdir(parents=True, exist_ok=True)
-        crop = img.crop((int(W * 0.62), int(H * 0.22), int(W * 0.88), int(H * 0.78)))
-        crop.resize((crop.width * 3, crop.height * 3), Image.LANCZOS).save(pv / "face-texture.png")
-        print(f"  preview -> tools/preview/face-texture.png")
-
-    print(f"  reference this as: {name}")
+        gap = 16
+        sheet = Image.new("RGB", (crops[0].width * 2 + gap, crops[0].height), (10, 18, 36))
+        sheet.paste(crops[0], (0, 0))
+        sheet.paste(crops[1], (crops[0].width + gap, 0))
+        sheet = sheet.resize((sheet.width * 2, sheet.height * 2), Image.LANCZOS)
+        sheet.save(pv / "face-texture.png")
+        print("  preview -> tools/preview/face-texture.png  (masculine, feminine)")
     return 0
 
 

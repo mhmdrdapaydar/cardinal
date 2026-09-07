@@ -84,6 +84,7 @@
           name: pl.name || "بازیکن",
           classId: Number(pl.classId) || 1,
           pkStatus: pl.pkStatus || "white",
+          gender: pl.gender === "female" ? "female" : "male",
           floor: Number(pl.currentFloor) || 1,
           location: pl.location === "wild" ? "wild" : "city",
         };
@@ -123,6 +124,7 @@
         name: state.me.name,
         classId: state.me.classId,
         pkStatus: state.me.pkStatus,
+        gender: state.me.gender,
         floor: state.me.floor,
         location: state.me.location,
         x: t.x, z: t.z, yaw: t.yaw,
@@ -142,24 +144,56 @@
   }
 
   // ------------------------------------------------------------------ chat
+  // Guarded against the duplicate-message report.
+  //
+  // pollChat is reachable from four places at once -- the interval, opening
+  // the panel, finishing a send, and gaining an identity. Two requests in
+  // flight with the same lastChatId both come back with the same rows and both
+  // used to append them, which is what made a new message repeat several times
+  // for the receiver. An in-flight flag stops the overlap, and the merge
+  // ignores any id already held so even a reordered response cannot duplicate.
+  var chatInFlight = false;
+
+  function mergeMessages(incoming) {
+    var seen = {};
+    var i;
+    for (i = 0; i < state.messages.length; i++) seen[state.messages[i].id] = true;
+    var added = 0;
+    for (i = 0; i < incoming.length; i++) {
+      var m = incoming[i];
+      if (seen[m.id]) continue;
+      seen[m.id] = true;
+      state.messages.push(m);
+      added++;
+      if (!state.open && !m.self) state.unread++;
+    }
+    if (!added) return false;
+    state.messages.sort(function (a, b) { return a.id - b.id; });
+    if (state.messages.length > 100) state.messages = state.messages.slice(-100);
+    var top = 0;
+    for (i = 0; i < state.messages.length; i++) if (state.messages[i].id > top) top = state.messages[i].id;
+    state.lastChatId = top;
+    return true;
+  }
+
   function pollChat() {
-    if (!state.me || !state.available || !inGame()) return;
+    if (!state.me || !state.available || !inGame() || chatInFlight) return;
+    chatInFlight = true;
     call("chat", state.lastChatId ? { query: "after=" + state.lastChatId } : null)
       .then(function (data) {
         var incoming = data.messages || [];
-        if (!incoming.length) return;
-        if (state.lastChatId === 0) state.messages = incoming;
-        else {
-          state.messages = state.messages.concat(incoming);
-          if (state.messages.length > 100) state.messages = state.messages.slice(-100);
-          if (!state.open) {
-            for (var i = 0; i < incoming.length; i++) if (!incoming[i].self) state.unread++;
-          }
+        // The server wipes the transcript once the realm empties. If it comes
+        // back with a full page whose ids are all below ours, the table was
+        // reset and our view has to reset with it.
+        if (!state.lastChatId) state.messages = [];
+        else if (incoming.length && incoming[incoming.length - 1].id < state.lastChatId) {
+          state.messages = [];
+          state.lastChatId = 0;
         }
-        state.lastChatId = state.messages[state.messages.length - 1].id;
-        renderChat();
+        if (mergeMessages(incoming)) renderChat();
       })
-      .catch(function () {});
+      .catch(function () {})
+      .then(function () { chatInFlight = false; });
   }
 
   function send(body) {
