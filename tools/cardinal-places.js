@@ -20,7 +20,14 @@
  * (the shadow frustum is +/-26 and these all sit outside or above it).
  */
 
-function cardinalMakePlaces(J, R, useFrame) {
+function cardinalMakePlaces(J, R, useFrame, groundHeight) {
+  // groundHeight(x, z, realm) is the build's own terrain function, passed in so
+  // scattered ground pieces sit on the surface instead of floating over the
+  // wild realm's hills.
+  function surface(x, z, realm) {
+    try { return groundHeight ? groundHeight(x, z, realm) : 0; } catch (err) { return 0; }
+  }
+
   // deterministic pseudo-random, so the layout is identical every mount
   function rnd(n) {
     var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -711,8 +718,158 @@ function cardinalMakePlaces(J, R, useFrame) {
     return J.jsxs("group", { ref: group, children: items });
   }
 
+  // -------------------------------------------------------- ground detail
+  // The floor is the biggest, emptiest surface on screen. These are flat
+  // decals -- damp staining, cracks, moss, grit -- laid just above it with
+  // varied rotation, scale and opacity, so one texture reads as many patches.
+  // Nothing solid, so nothing needs a collider.
+  function GroundDetail(props) {
+    var tex = props.tex;
+    var count = props.count;
+    var city = props.city;
+    var realm = city ? "city" : "wild";
+    var rMin = city ? 6.5 : 9;
+    var rMax = city ? 30 : 54;
+    var items = [];
+    for (var i = 0; i < count; i++) {
+      var a = rnd(i + 101) * Math.PI * 2;
+      var r = rMin + rnd(i + 202) * (rMax - rMin);
+      var x = Math.cos(a) * r;
+      var z = Math.sin(a) * r;
+      var scale = (city ? 2.6 : 4.2) + rnd(i + 303) * (city ? 3.4 : 5.5);
+      items.push(
+        J.jsxs("mesh", {
+          position: [x, surface(x, z, realm) + 0.045 + (i % 5) * 0.004, z],
+          rotation: [-Math.PI / 2, 0, rnd(i + 404) * Math.PI * 2],
+          renderOrder: 1,
+          children: [
+            J.jsx("planeGeometry", { args: [scale, scale] }),
+            J.jsx("meshBasicMaterial", {
+              map: tex,
+              transparent: true,
+              opacity: (city ? 0.34 : 0.46) + rnd(i + 505) * 0.22,
+              depthWrite: false,
+              toneMapped: false
+            })
+          ]
+        }, i)
+      );
+    }
+    return J.jsxs("group", { children: items });
+  }
+
+  // ------------------------------------------------------- market clutter
+  // The market already owns a collider circle of radius 4.1 at (-15, -2), so
+  // everything dropped inside it is unreachable by the avatar and needs no
+  // collision of its own.
+  function MarketClutter(props) {
+    var palette = props.palette;
+    var full = props.full;
+    var box = function (key, pos, size, tone, rot) {
+      return J.jsxs("mesh", {
+        castShadow: true, position: pos, rotation: [0, rot, 0],
+        children: [
+          J.jsx("boxGeometry", { args: size }),
+          J.jsx("meshStandardMaterial", { color: tone, roughness: 0.82 })
+        ]
+      }, key);
+    };
+    var barrel = function (key, pos, rot) {
+      return J.jsxs("group", { position: pos, rotation: [0, rot, 0], children: [
+        J.jsxs("mesh", { castShadow: true, children: [
+          J.jsx("cylinderGeometry", { args: [0.32, 0.28, 0.78, 10] }),
+          J.jsx("meshStandardMaterial", { color: "#6b4a2c", roughness: 0.8 })
+        ] }, "b"),
+        J.jsxs("mesh", { position: [0, 0.16, 0], children: [
+          J.jsx("cylinderGeometry", { args: [0.335, 0.335, 0.06, 10] }),
+          J.jsx("meshStandardMaterial", { color: "#3f4a58", metalness: 0.6, roughness: 0.4 })
+        ] }, "h1"),
+        J.jsxs("mesh", { position: [0, -0.18, 0], children: [
+          J.jsx("cylinderGeometry", { args: [0.32, 0.32, 0.06, 10] }),
+          J.jsx("meshStandardMaterial", { color: "#3f4a58", metalness: 0.6, roughness: 0.4 })
+        ] }, "h2")
+      ] }, key);
+    };
+    var kids = [
+      box("c1", [1.6, 0.31, 1.5], [0.62, 0.62, 0.62], "#7d5733", 0.4),
+      box("c2", [2.0, 0.86, 1.3], [0.5, 0.5, 0.5], "#8a6039", -0.25),
+      box("c3", [-2.4, 0.28, 1.8], [0.56, 0.56, 0.56], "#6d4c2d", 0.9),
+      barrel("d1", [-1.5, 0.39, 2.3], 0.3),
+      barrel("d2", [2.7, 0.39, -0.4], -0.6)
+    ];
+    if (full) {
+      kids.push(box("c4", [-2.9, 0.24, 0.4], [0.48, 0.48, 0.7], "#825c36", -0.5));
+      kids.push(barrel("d3", [0.6, 0.39, 2.6], 0.15));
+      // sacks: squashed spheres read as grain better than boxes
+      kids.push(J.jsxs("mesh", {
+        castShadow: true, position: [-0.4, 0.26, 2.2], scale: [1, 0.85, 0.9],
+        children: [
+          J.jsx("sphereGeometry", { args: [0.3, 9, 7] }),
+          J.jsx("meshStandardMaterial", { color: "#b8a077", roughness: 0.95 })
+        ]
+      }, "s1"));
+      kids.push(J.jsxs("mesh", {
+        castShadow: true, position: [0.1, 0.24, 2.5], scale: [1, 0.8, 0.9],
+        children: [
+          J.jsx("sphereGeometry", { args: [0.27, 9, 7] }),
+          J.jsx("meshStandardMaterial", { color: "#c2ab82", roughness: 0.95 })
+        ]
+      }, "s2"));
+      // a hanging lantern over the counter
+      kids.push(J.jsxs("mesh", {
+        position: [0, 2.5, 1.2],
+        children: [
+          J.jsx("boxGeometry", { args: [0.26, 0.34, 0.26] }),
+          J.jsx("meshStandardMaterial", {
+            color: "#ffe3ad", emissive: palette.accent, emissiveIntensity: 1.9, roughness: 0.4
+          })
+        ]
+      }, "lan"));
+    }
+    return J.jsxs("group", { position: [-15, 0, -2], rotation: [0, 0.55, 0], children: kids });
+  }
+
+  // ------------------------------------------------------------ mushrooms
+  // Ankle height, so walking through one is not noticeable, which keeps the
+  // build's collision volumes untouched.
+  function Mushrooms(props) {
+    var palette = props.palette;
+    var count = props.count;
+    var items = [];
+    for (var i = 0; i < count; i++) {
+      var a = rnd(i + 71) * Math.PI * 2;
+      var r = 11 + rnd(i + 91) * 42;
+      var x = Math.cos(a) * r;
+      var z = Math.sin(a) * r;
+      var y = surface(x, z, "wild");
+      var caps = [];
+      var n = 2 + Math.floor(rnd(i + 33) * 3);
+      for (var k = 0; k < n; k++) {
+        var sc = 0.55 + rnd(i * 5 + k) * 0.75;
+        var ox = (rnd(i + k + 11) - 0.5) * 1.1;
+        var oz = (rnd(i + k + 22) - 0.5) * 1.1;
+        caps.push(J.jsxs("group", { position: [ox, 0, oz], children: [
+          J.jsxs("mesh", { position: [0, 0.16 * sc, 0], children: [
+            J.jsx("cylinderGeometry", { args: [0.045 * sc, 0.06 * sc, 0.32 * sc, 6] }),
+            J.jsx("meshStandardMaterial", { color: "#d8ccb4", roughness: 0.85 })
+          ] }, "s"),
+          J.jsxs("mesh", { position: [0, 0.33 * sc, 0], children: [
+            J.jsx("sphereGeometry", { args: [0.16 * sc, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2] }),
+            J.jsx("meshStandardMaterial", {
+              color: palette.crystal, emissive: palette.crystal,
+              emissiveIntensity: 1.5, roughness: 0.45, toneMapped: false
+            })
+          ] }, "c")
+        ] }, k));
+      }
+      items.push(J.jsxs("group", { position: [x, y, z], children: caps }, i));
+    }
+    return J.jsxs("group", { children: items });
+  }
+
   // --------------------------------------------------------------- entrypoint
   return function CardinalPlaces(props) {
+    var ground = props.ground;
     var quality = props.quality;
     var palette = props.palette;
     var city = props.city;
@@ -731,11 +888,15 @@ function cardinalMakePlaces(J, R, useFrame) {
     ];
     if (city) {
       children.push(J.jsx(Ramparts, { palette: palette, segments: tier(quality, 10, 8, 6) }, "ramp"));
+      if (ground) children.push(J.jsx(GroundDetail, { tex: ground, city: true, count: tier(quality, 26, 16, 0) }, "gd"));
+      children.push(J.jsx(MarketClutter, { palette: palette, full: quality === "high" }, "mkt"));
       children.push(J.jsx(Rooftops, { palette: palette, count: tier(quality, 14, 12, 7) }, "roof"));
       children.push(J.jsx(Garlands, { palette: palette, lines: tier(quality, 4, 2, 0), perLine: tier(quality, 9, 7, 0) }, "gar"));
       children.push(J.jsx(SkyLanterns, { palette: palette, count: tier(quality, 16, 8, 0) }, "lan"));
       children.push(J.jsx(Monoliths, { palette: palette, count: tier(quality, 9, 5, 0) }, "mon"));
     } else {
+      if (ground) children.push(J.jsx(GroundDetail, { tex: ground, city: false, count: tier(quality, 30, 18, 0) }, "gd"));
+      children.push(J.jsx(Mushrooms, { palette: palette, count: tier(quality, 16, 9, 0) }, "mush"));
       children.push(J.jsx(WildCrystals, { palette: palette, count: tier(quality, 9, 6, 0) }, "cry"));
       children.push(J.jsx(Wisps, { palette: palette, count: tier(quality, 26, 14, 0) }, "wisp"));
       children.push(J.jsx(FloatingIsles, { palette: palette, count: tier(quality, 7, 4, 0) }, "isl"));

@@ -168,9 +168,9 @@ CEL_GLSL = (
 PLACES_SOURCE = (ROOT / "tools" / "cardinal-places.js").read_text(encoding="utf-8")
 
 
-def places_installer(jsx: str, react: str, use_frame: str) -> str:
+def places_installer(jsx: str, react: str, use_frame: str, terrain: str) -> str:
     return (PLACES_SOURCE
-            + f"\nvar cardinalPlaces=cardinalMakePlaces({jsx},{react},{use_frame});"
+            + f"\nvar cardinalPlaces=cardinalMakePlaces({jsx},{react},{use_frame},{terrain});"
             + f"\nvar cardinalPortal=cardinalMakePortal({jsx},{react},{use_frame});\n")
 
 
@@ -299,7 +299,7 @@ LEGACY_UI_PATCHES = [
 ]
 
 
-LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palette:a,city:!0,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),b.jsx(Gv,{palette:a,city:!0,quality:n})'), ('mount place detail in the wild scene', 'b.jsx(Gv,{palette:a,city:!1,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),b.jsx(Gv,{palette:a,city:!1,quality:n})')]
+LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palette:a,city:!0,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0,ground:Lv(CARDINAL_GROUND_URL,1,1,n)}),b.jsx(Gv,{palette:a,city:!0,quality:n})'), ('mount place detail in the wild scene', 'b.jsx(Gv,{palette:a,city:!1,quality:n})', 'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1,ground:Lv(CARDINAL_GROUND_URL,1,1,n)}),b.jsx(Gv,{palette:a,city:!1,quality:n})')]
 
 # --------------------------------------------------------------------------
 # Avatar detail (tools/cardinal-avatar.js).
@@ -319,6 +319,14 @@ LEGACY_PLACE_MOUNTS = [('mount place detail in the city scene', 'b.jsx(Gv,{palet
 # ones did. Filename carries a content hash; it is discovered rather than
 # hardcoded so regenerating the texture does not need a code edit.
 # --------------------------------------------------------------------------
+def ground_decal_name() -> str:
+    found = sorted(ASSETS.glob("cardinal-ground-*.png"))
+    if len(found) != 1:
+        sys.exit(f"ABORT: expected exactly one cardinal-ground-*.png in assets/, found {len(found)}."
+                 " Run: python3 tools/make_ground_decal.py")
+    return found[0].name
+
+
 def portal_texture_name() -> str:
     found = sorted(ASSETS.glob("cardinal-portal-*.png"))
     if len(found) != 1:
@@ -363,8 +371,8 @@ SIGIL_MODERN = [
     ),
     (
         "plaza sigil: laid into the plaza",
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0})',
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),'
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0,ground:Wt(CARDINAL_GROUND_URL,1,1,e)})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0,ground:Wt(CARDINAL_GROUND_URL,1,1,e)}),'
         'f.jsxs("mesh",{rotation:[-Math.PI/2,0,0],position:[0,.06,0],renderOrder:2,children:['
         'f.jsx("planeGeometry",{args:[34,34]}),'
         'f.jsx("meshBasicMaterial",{map:Wt(CARDINAL_PLAZA_URL,1,1,e),transparent:!0,opacity:e==="low"?.5:.78,depthWrite:!1,blending:tn,toneMapped:!1})]})',
@@ -379,8 +387,8 @@ SIGIL_LEGACY = [
     ),
     (
         "plaza sigil: laid into the plaza",
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0})',
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),'
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0,ground:Lv(CARDINAL_GROUND_URL,1,1,n)})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0,ground:Lv(CARDINAL_GROUND_URL,1,1,n)}),'
         'b.jsxs("mesh",{rotation:[-Math.PI/2,0,0],position:[0,.06,0],renderOrder:2,children:['
         'b.jsx("planeGeometry",{args:[34,34]}),'
         'b.jsx("meshBasicMaterial",{map:Lv(CARDINAL_PLAZA_URL,1,1,n),transparent:!0,opacity:"low"===n?.5:.78,depthWrite:!1,blending:O,toneMapped:!1})]})',
@@ -398,6 +406,7 @@ GATE_MODERN = [
     (
         "portal texture: url constant",
         'CARDINAL_PLAZA_URL=""+new URL(',
+        'CARDINAL_GROUND_URL=""+new URL("' + "{GROUND}" + '",import.meta.url).href,'
         'CARDINAL_PORTAL_URL=""+new URL("' + "{PORTAL}" + '",import.meta.url).href,CARDINAL_PLAZA_URL=""+new URL(',
     ),
     (
@@ -412,6 +421,7 @@ GATE_LEGACY = [
     (
         "portal texture: url constant",
         'CARDINAL_PLAZA_URL=""+new URL(',
+        'CARDINAL_GROUND_URL=""+new URL("' + "{GROUND}" + '",v.meta.url).href,'
         'CARDINAL_PORTAL_URL=""+new URL("' + "{PORTAL}" + '",v.meta.url).href,CARDINAL_PLAZA_URL=""+new URL(',
     ),
     (
@@ -426,14 +436,14 @@ GATE_LEGACY = [
 PEERS_MODERN = [
     (
         "peers: mounted in the city scene",
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0})',
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),'
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0,ground:Wt(CARDINAL_GROUND_URL,1,1,e)})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0,ground:Wt(CARDINAL_GROUND_URL,1,1,e)}),'
         'f.jsx(cardinalAvatar.Peers,{texM:Wt(CARDINAL_FACE_M,1,1,"high"),texF:Wt(CARDINAL_FACE_F,1,1,"high"),colours:Ix,label:em,max:e==="high"?14:e==="balanced"?8:4})',
     ),
     (
         "peers: mounted in the wild scene",
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1})',
-        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),'
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1,ground:Wt(CARDINAL_GROUND_URL,1,1,e)})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1,ground:Wt(CARDINAL_GROUND_URL,1,1,e)}),'
         'f.jsx(cardinalAvatar.Peers,{texM:Wt(CARDINAL_FACE_M,1,1,"high"),texF:Wt(CARDINAL_FACE_F,1,1,"high"),colours:Ix,label:em,max:e==="high"?14:e==="balanced"?8:4})',
     ),
     (
@@ -447,14 +457,14 @@ PEERS_MODERN = [
 PEERS_LEGACY = [
     (
         "peers: mounted in the city scene",
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0})',
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),'
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0,ground:Lv(CARDINAL_GROUND_URL,1,1,n)})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0,ground:Lv(CARDINAL_GROUND_URL,1,1,n)}),'
         'b.jsx(cardinalAvatar.Peers,{texM:Lv(CARDINAL_FACE_M,1,1,"high"),texF:Lv(CARDINAL_FACE_F,1,1,"high"),colours:xv,label:Jm,max:"high"===n?14:"balanced"===n?8:4})',
     ),
     (
         "peers: mounted in the wild scene",
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1})',
-        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),'
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1,ground:Lv(CARDINAL_GROUND_URL,1,1,n)})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1,ground:Lv(CARDINAL_GROUND_URL,1,1,n)}),'
         'b.jsx(cardinalAvatar.Peers,{texM:Lv(CARDINAL_FACE_M,1,1,"high"),texF:Lv(CARDINAL_FACE_F,1,1,"high"),colours:xv,label:Jm,max:"high"===n?14:"balanced"===n?8:4})',
     ),
     (
@@ -544,15 +554,17 @@ WALL_MODERN = [('city wall: tiers, chord width, gate opening', 'const t=Wt(Yo,1.
 
 WALL_LEGACY = [('city wall: tiers, chord width, gate opening', 'i="low"===t?5:10,a="low"===t?3:6;', 'i="low"===t?6:"balanced"===t?8:10,a="low"===t?4:"balanced"===t?9:12,cw=2*35.5*Math.sin(Math.PI/i)+.5,gs=Math.round(i/4-.5);'), ('city wall: tangential orientation', 'function(e,o){var s=o/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.65,u],rotation:[0,-s,0],', 'function(e,o){if(o===gs)return null;var s=(o+.5)/i*Math.PI*2,l=35.5*Math.cos(s),u=35.5*Math.sin(s);return b.jsxs("group",{position:[l,1.9,u],rotation:[0,-s-Math.PI/2,0],'), ('city wall: slab spans the full chord', 'b.jsx("boxGeometry",{args:[8.2,3.25,1.05]})', 'b.jsx("boxGeometry",{args:[cw,3.8,1.15]})'), ('city wall: coping course', 'b.jsxs("mesh",{position:[0,1.97,.58],children:[b.jsx("boxGeometry",{args:[7.85,.26,.15]})', 'b.jsxs("mesh",{position:[0,2.05,.62],children:[b.jsx("boxGeometry",{args:[cw*.99,.3,.22]})'), ('city wall: battlements spread over the chord', 'b.jsxs("mesh",{position:[t*(6.56/Math.max(1,a-1))-3.28,2.05,0],children:[b.jsx("boxGeometry",{args:[.65,.85,1.25]})', 'b.jsxs("mesh",{position:[t*(cw*.88/Math.max(1,a-1))-cw*.44,2.42,0],children:[b.jsx("boxGeometry",{args:[.72,.98,1.35]})'), ('city wall: banner height', 'o%2==0&&b.jsx(yg,{position:[0,3.05,.1]', 'o%2==0&&b.jsx(yg,{position:[0,3.4,.1]')]
 
-MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palette:i,city:!0,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),f.jsx(x_,{palette:i,city:!0,quality:e})'), ('mount place detail in the wild scene', 'f.jsx(x_,{palette:i,city:!1,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),f.jsx(x_,{palette:i,city:!1,quality:e})')]
+MODERN_PLACE_MOUNTS = [('mount place detail in the city scene', 'f.jsx(x_,{palette:i,city:!0,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0,ground:Wt(CARDINAL_GROUND_URL,1,1,e)}),f.jsx(x_,{palette:i,city:!0,quality:e})'), ('mount place detail in the wild scene', 'f.jsx(x_,{palette:i,city:!1,quality:e})', 'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1,ground:Wt(CARDINAL_GROUND_URL,1,1,e)}),f.jsx(x_,{palette:i,city:!1,quality:e})')]
 
 
 def _tex(patches):
     face_m, face_f = face_texture_names()
     plaza = plaza_decal_name()
     portal = portal_texture_name()
+    ground = ground_decal_name()
     return [(label, a, b.replace("{FACE_M}", face_m).replace("{FACE_F}", face_f)
-                        .replace("{PLAZA}", plaza).replace("{PORTAL}", portal))
+                        .replace("{PLAZA}", plaza).replace("{PORTAL}", portal)
+                        .replace("{GROUND}", ground))
             for label, a, b in patches]
 
 
@@ -561,7 +573,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
-            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}{places_installer("f", "H", "kt")}{avatar_installer("f", "H", "kt")}'
+            f'IC="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("Np")}{places_installer("f", "H", "kt", "Nt")}{avatar_installer("f", "H", "kt")}'
             'function c_(r){var u=cardinalWorldHiTexture()?r.replace(/\\.jpg$/i,"-hi.jpg"):r;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
         ),
@@ -630,7 +642,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
-            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}{places_installer("b", "_", "Qp")}{avatar_installer("b", "_", "Qp")}'
+            f'pv="{RELEASE}";{TEXTURE_SELECTOR}{cel_installer("hl")}{places_installer("b", "_", "Qp", "Ev")}{avatar_installer("b", "_", "Qp")}'
             'function mv(e){var u=cardinalWorldHiTexture()?e.replace(/\\.jpg$/i,"-hi.jpg"):e;'
             'return"".concat(u).concat(u.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
         ),
