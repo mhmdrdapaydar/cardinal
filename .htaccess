@@ -53,7 +53,19 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^tools(/|$) - [F,L]
+  # realtime.php keeps its SQLite file here when it cannot place it above the
+  # web root. It must never be downloadable.
+  RewriteRule ^data(/|$) - [F,L]
 </IfModule>
+
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|db)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
 
 # Configuration and source helpers are executed only through api.php, never
 # served as files. This is defense in depth; production credentials belong

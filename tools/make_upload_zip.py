@@ -31,12 +31,13 @@ import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PACKAGE = "20260906-painted-1"
+PACKAGE = "20260907-online-1"
 
 INCLUDE_FILES = [
     ".htaccess",
     "index.html",
     "api.php",
+    "realtime.php",
     "config.php",
     "private-config.example.php",
     "README.md",
@@ -56,6 +57,10 @@ LOGIC_FILES = [
     "lib/Rules.php",
     "lib/DemoGame.php",
 ]
+
+# realtime.php is new and must stay isolated from the game layer. If a future
+# edit ever reaches for the game database, the package should refuse to build.
+FORBIDDEN_IN_REALTIME = ["cardinal_game", "CardinalGame", "lib/bootstrap", "mysql:", "UPDATE players"]
 
 # Files that must never regress to a location-gated inventory read again, and
 # the action the interface now depends on. Cheap tripwires against a bad merge.
@@ -115,6 +120,13 @@ def verify(zip_path: pathlib.Path) -> None:
 
         if any(n.startswith("tools/") for n in names):
             sys.exit("ABORT: build tooling leaked into the upload archive")
+
+        realtime = archive.read("realtime.php").decode("utf-8")
+        for needle in FORBIDDEN_IN_REALTIME:
+            if needle in realtime:
+                sys.exit(f"ABORT: realtime.php reaches into the game layer ({needle!r})")
+        if "cardinal-net-" not in html:
+            sys.exit("ABORT: index.html does not load the realtime client")
 
         for path, snippets in REQUIRED_SNIPPETS.items():
             body = archive.read(path).decode("utf-8")

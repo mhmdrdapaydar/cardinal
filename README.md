@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260906-painted-1`
+## Release `20260907-online-1`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -40,6 +40,24 @@ If you want any of these to stay restricted on a particular server, re-add the c
 The shared Button component hardcoded `type="button"` before spreading its props, so **no form in the app could be submitted by its own button** — clicking simply did nothing. Ten controls were affected: teleport, discarding an item, starting an attack, sending a gift, transferring, forming a party, joining, accepting a partner and two more. Cancel buttons already passed `type="button"` explicitly, which is what shows the intended default was `submit`.
 
 The release builder now scans both entry bundles for Button calls that pass neither `type` nor `onClick` — by construction those can only be a form's submit control — and gives them `type="submit"`. It asserts it finds exactly ten in each bundle.
+
+### Online: presence and chat
+
+New, and **kept completely off the game database** as asked.
+
+`realtime.php` opens its own SQLite file and never touches MySQL. It does not read or write coins, level, inventory, floor progress or any other authoritative value, and nothing it stores can influence a rule. Delete the file and the game is unaffected; only chat history and who is currently visible are lost. The schema is created on first use, so there is nothing to install. The file is placed above the web root when that directory is writable, otherwise in `data/`, which `.htaccess` denies along with every `*.sqlite`.
+
+The only thing it borrows from the game is identity: the player id already on the PHP session. Everything the client reports — name, class, cursor colour, position — is treated as untrusted decoration, sanitised and clamped, exactly like the non-authoritative avatar layer this package documents.
+
+- **Players see each other.** Anyone on the same floor *and* the same side of the gate is in the same room. Position, heading and a moving flag are exchanged about once a second, and each remote avatar interpolates toward its target every frame, so movement reads as walking rather than teleporting.
+- **A player who stops sending heartbeats disappears after 60 seconds**, and the heartbeat stops as soon as the tab is hidden, so a backgrounded browser does not leave a ghost standing in the plaza.
+- **Rooms split into lobbies of 50.** The split is a stable slice, so the same people stay together between polls instead of reshuffling.
+- **Chat** keeps the last 100 messages, trims its file at 400, caps a message at 240 characters and rate-limits one message every 1.2 seconds per player.
+- **The SAO colour cursor** floats above every head, yours included, driven by the `pk_status` the database already stores: green for a normal player, orange for a criminal, red for a killer. The same colour repeats beside each chat line.
+
+The client for all of this is `assets/cardinal-net-*.js`, loaded by `index.html` and deliberately **outside** the game bundle, so presence and chat cannot break the React tree. It needs no hook into the render loop: the shipped camera controller already publishes the avatar's position on the canvas every frame as `data-cardinal-avatar` and `data-cardinal-heading`.
+
+`tools/devtest/test_realtime.sh` drives the service against a real PHP runtime and a throwaway SQLite file: 34 checks covering auth, room separation, expiry, input clamping, chat retention, the rate limit and lobby splitting.
 
 ### Graphics
 
@@ -83,7 +101,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260906-painted-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260907-online-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

@@ -376,6 +376,52 @@ SIGIL_LEGACY = [
 ]
 
 
+# Remote players and the SAO colour cursor. `em`/`i0` is the drei Html helper
+# the build already uses for the self label, and Ix/Ov is its class-visual
+# table; both are passed in rather than re-created.
+PEERS_MODERN = [
+    (
+        "peers: mounted in the city scene",
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!0}),'
+        'f.jsx(cardinalAvatar.Peers,{tex:Wt(CARDINAL_FACE_URL,1,1,"high"),colours:Ix,label:em,max:e==="low"?8:20})',
+    ),
+    (
+        "peers: mounted in the wild scene",
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1})',
+        'f.jsx(cardinalPlaces,{palette:i,quality:e,city:!1}),'
+        'f.jsx(cardinalAvatar.Peers,{tex:Wt(CARDINAL_FACE_URL,1,1,"high"),colours:Ix,label:em,max:e==="low"?8:20})',
+    ),
+    (
+        "own colour cursor above the head",
+        'f.jsx("pointLight",{color:u.glow,intensity:2.55,distance:7.3,position:[0,1.65,0]})',
+        'f.jsx(cardinalAvatar.Cursor,{pk:r.pkStatus||"white",y:2.72,phase:0}),'
+        'f.jsx("pointLight",{color:u.glow,intensity:2.55,distance:7.3,position:[0,1.65,0]})',
+    ),
+]
+
+PEERS_LEGACY = [
+    (
+        "peers: mounted in the city scene",
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!0}),'
+        'b.jsx(cardinalAvatar.Peers,{tex:Lv(CARDINAL_FACE_URL,1,1,"high"),colours:xv,label:Jm,max:"low"===n?8:20})',
+    ),
+    (
+        "peers: mounted in the wild scene",
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1})',
+        'b.jsx(cardinalPlaces,{palette:a,quality:n,city:!1}),'
+        'b.jsx(cardinalAvatar.Peers,{tex:Lv(CARDINAL_FACE_URL,1,1,"high"),colours:xv,label:Jm,max:"low"===n?8:20})',
+    ),
+    (
+        "own colour cursor above the head",
+        'b.jsx("pointLight",{color:c.glow,intensity:2.55,distance:7.3,position:[0,1.65,0]})',
+        'b.jsx(cardinalAvatar.Cursor,{pk:n.pkStatus||"white",y:2.72,phase:0}),'
+        'b.jsx("pointLight",{color:c.glow,intensity:2.55,distance:7.3,position:[0,1.65,0]})',
+    ),
+]
+
+
 FACE_MODERN = [
     (
         "face texture: url constant",
@@ -461,7 +507,7 @@ def _tex(patches):
 
 
 PATCHES: dict[str, list[tuple[str, str, str]]] = {
-    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + _tex(FACE_MODERN) + _tex(SIGIL_MODERN) + [
+    WORLD: MODERN_PLACE_MOUNTS + WALL_MODERN + AVATAR_MODERN + _tex(FACE_MODERN) + _tex(SIGIL_MODERN) + _tex(PEERS_MODERN) + [
         (
             "texture tier + cel-shading installer",
             'IC="20260905-world-recovery-1";function c_(r){return"".concat(r).concat(r.includes("?")?"&":"?","cardinal-world=").concat(IC)}',
@@ -530,7 +576,7 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
     ],
     MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
     MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
-    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + [
+    WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + _tex(PEERS_LEGACY) + [
         (
             "texture tier + cel-shading installer",
             'pv="20260905-world-recovery-1";function mv(e){return"".concat(e).concat(e.includes("?")?"&":"?","cardinal-world=").concat(pv)}',
@@ -714,6 +760,21 @@ def apply_submit_fix(text: str, name: str, jsx: str, button: str, report, expect
     return result
 
 
+# --------------------------------------------------------------------------
+# Realtime client (tools/cardinal-net.js).
+#
+# Shipped as its own asset and loaded by index.html, NOT merged into the game
+# bundle: presence, chat and the roster cannot break the React tree, and the
+# file can be edited without rebuilding anything. It reads the local position
+# from the canvas dataset the camera controller already publishes.
+# --------------------------------------------------------------------------
+def build_net_asset(content_map) -> str:
+    source = (ROOT / "tools" / "cardinal-net.js").read_bytes()
+    name = f"cardinal-net-{short_hash(source)}.js"
+    content_map[name] = source
+    return name
+
+
 def snapshot_pristine() -> None:
     PRISTINE.mkdir(parents=True, exist_ok=True)
     for name in MANAGED:
@@ -863,18 +924,28 @@ def main() -> int:
         if old in html:
             sys.exit(f"ABORT: index.html still references removed asset {old}")
 
+    # ---- 4b. realtime client asset
+    extra: dict[str, bytes] = {}
+    net_name = build_net_asset(extra)
+    marker = '<script type="module" crossorigin src="./assets/' + renamed[MAIN] + '"></script>'
+    if marker not in html:
+        sys.exit("ABORT: could not find the module entry script tag in index.html")
+    html = html.replace(marker, marker + '\n    <script defer src="./assets/' + net_name + '"></script>', 1)
+
     # ---- 5. write everything (removing any previous release's hashed files)
-    keep = set(renamed.values()) | set(ALIASES)
+    keep = set(renamed.values()) | set(ALIASES) | set(extra)
     for existing in ASSETS.iterdir():
         if not existing.is_file():
             continue
         name = existing.name
         if name in keep:
             continue
-        if re.fullmatch(r"(index|index-legacy|polyfills-legacy|WorldScene|WorldScene-legacy)-[A-Za-z0-9_-]+\.(js|css)", name):
+        if re.fullmatch(r"(index|index-legacy|polyfills-legacy|WorldScene|WorldScene-legacy|cardinal-net)-[A-Za-z0-9_-]+\.(js|css)", name):
             existing.unlink()
     for old, new in renamed.items():
         (ASSETS / new).write_bytes(content[old])
+    for name, blob in extra.items():
+        (ASSETS / name).write_bytes(blob)
     for alias, canonical in ALIASES.items():
         (ASSETS / alias).write_bytes(content[canonical])
     (ROOT / "index.html").write_text(html, encoding="utf-8")

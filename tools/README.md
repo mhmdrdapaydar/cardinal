@@ -10,6 +10,8 @@ about a game rule, formula, reward, cost, cooldown or progression value.
 | File | Purpose |
 | --- | --- |
 | `build_graphics_release.py` | Applies the graphics patches to the shipped Vite build, appends `cardinal-fx.css`, re-hashes the bundles and rewires `index.html`. |
+| `cardinal-net.js` | Realtime client: presence sync, chat window, online roster. Shipped as its own asset, loaded by index.html, outside the game bundle. |
+| `devtest/` | `test_realtime.sh` drives realtime.php against a real PHP runtime and a throwaway SQLite file (34 checks). `rt_request.php` turns env vars into a faithful request, seeding a real session file and serving php://input through a stream wrapper so no test hook is needed in the shipped code. |
 | `make_avatar_face.py` | Paints the equirectangular face texture for the avatar's head sphere. |
 | `make_plaza_decal.py` | Paints the SAO-style system circle laid into the plaza floor. |
 | `cardinal-avatar.js` | Detailed avatar hair and face, as one ES5 factory shared by both bundles. Also holds an unused outfit layer, kept for reference. |

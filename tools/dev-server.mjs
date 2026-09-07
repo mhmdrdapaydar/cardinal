@@ -145,9 +145,71 @@ const send = (res, status, body, type = "application/json; charset=utf-8") => {
   res.end(body);
 };
 
+
+// ---------------------------------------------------------------------------
+// Mock realtime.php. The real service is PHP + SQLite; this in-memory stand-in
+// exists only so the chat and presence UI can be driven locally without PHP.
+// It implements no game rule.
+// ---------------------------------------------------------------------------
+const rt = { presence: new Map(), chat: [], nextChatId: 1 };
+function rtHandle(url, method, body, res) {
+  const route = url.searchParams.get("route") || "";
+  const me = 500001;
+  const now = Math.floor(Date.now() / 1000);
+  const ok = (data) => send(res, 200, JSON.stringify({ ok: true, data }));
+
+  if (route === "health") return ok({ service: "cardinal-realtime", sqlite: true, presenceTtl: 60, lobbySize: 50, signedIn: true });
+
+  if (route === "sync") {
+    const b = body || {};
+    rt.presence.set(me, { ...b, id: me, seen: now });
+    // two synthetic neighbours so the roster and the 3D layer have something
+    // to draw while developing
+    rt.presence.set(900001, { id: 900001, name: "آسونا", classId: 2, pkStatus: "orange",
+      floor: b.floor, location: b.location, x: 4.5, z: -3.2, yaw: 0.8, moving: false, seen: now });
+    rt.presence.set(900002, { id: 900002, name: "کلاین", classId: 3, pkStatus: "red",
+      floor: b.floor, location: b.location,
+      x: Math.sin(Date.now() / 2400) * 7, z: 5 + Math.cos(Date.now() / 2400) * 7,
+      yaw: Date.now() / 1600 % 6.28, moving: true, seen: now });
+    const room = [...rt.presence.values()].filter((p) => p.floor === b.floor && p.location === b.location);
+    return ok({
+      players: room.filter((p) => p.id !== me).map((p) => ({
+        id: p.id, name: p.name, classId: p.classId, pkStatus: p.pkStatus,
+        x: p.x, z: p.z, yaw: p.yaw, moving: !!p.moving, idle: 0 })),
+      room: { location: b.location, floor: b.floor },
+      lobby: 1, lobbies: 1, inRoom: room.length, online: rt.presence.size, ttl: 60,
+    });
+  }
+
+  if (route === "chat") {
+    const after = Number(url.searchParams.get("after") || 0);
+    const rows = after ? rt.chat.filter((m) => m.id > after) : rt.chat.slice(-100);
+    return ok({ messages: rows.map((m) => ({ ...m, self: m.playerId === me })), keep: 100 });
+  }
+
+  if (route === "chat/send") {
+    const text = String((body && body.body) || "").trim().slice(0, 240);
+    if (!text) return send(res, 422, JSON.stringify({ ok: false, error: "متن پیام خالی است." }));
+    rt.chat.push({ id: rt.nextChatId++, playerId: me, name: (body && body.name) || "بازیکن",
+                   classId: (body && body.classId) || 1, pkStatus: (body && body.pkStatus) || "white",
+                   body: text, at: now });
+    if (rt.chat.length > 400) rt.chat = rt.chat.slice(-400);
+    return ok({ id: rt.nextChatId - 1 });
+  }
+
+  return send(res, 404, JSON.stringify({ ok: false, error: "مسیر درخواستی وجود ندارد." }));
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  if (url.pathname.endsWith("/realtime.php")) {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    let parsed = null;
+    try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
+    return rtHandle(url, req.method, parsed, res);
+  }
   if (url.pathname.endsWith("/api.php")) {
     const route = (url.searchParams.get("route") || "").replace(/^\/+|\/+$/g, "");
     let body = "";

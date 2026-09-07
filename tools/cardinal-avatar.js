@@ -344,5 +344,180 @@ function cardinalMakeAvatar(J, R, useFrame) {
     ] });
   }
 
-  return { Head: Head, Hair: Hair, Face: Face, Outfit: Outfit };
+  // ----------------------------------------------------------------- peers
+  // Other players, fed by cardinal-net.js through window.__cardinalPeers.
+  //
+  // The list refreshes about once a second, but each avatar interpolates
+  // toward its target every frame, so movement reads as walking rather than
+  // teleporting. Kept deliberately light -- five meshes and one label each --
+  // because a lobby holds up to 50.
+  function Cursor(props) {
+    // The SAO colour cursor: green normal, orange criminal, red killer.
+    var pk = props.pk;
+    var tone = pk === "red" ? "#f0554f" : pk === "orange" ? "#f0a24a" : "#58d98f";
+    var ref = R.useRef(null);
+    useFrame(function (state) {
+      if (ref.current) {
+        ref.current.position.y = props.y + Math.sin(state.clock.elapsedTime * 2 + props.phase) * 0.05;
+        ref.current.rotation.y = state.clock.elapsedTime * 0.9;
+      }
+    });
+    return J.jsxs("group", { ref: ref, position: [0, props.y, 0], children: [
+      J.jsxs("mesh", {
+        rotation: [Math.PI, 0, 0],
+        children: [
+          J.jsx("coneGeometry", { args: [0.16, 0.3, 4] }),
+          J.jsx("meshStandardMaterial", {
+            color: tone, emissive: tone, emissiveIntensity: 2.2,
+            roughness: 0.25, metalness: 0.1, toneMapped: false
+          })
+        ]
+      }, "c"),
+      J.jsxs("mesh", {
+        position: [0, 0.17, 0],
+        rotation: [Math.PI / 2, 0, 0],
+        children: [
+          J.jsx("ringGeometry", { args: [0.19, 0.23, 16] }),
+          J.jsx("meshBasicMaterial", { color: tone, transparent: true, opacity: 0.5, side: 2 })
+        ]
+      }, "r")
+    ] });
+  }
+
+  function Peer(props) {
+    var peer = props.peer;
+    var tex = props.tex;
+    var visual = props.visual;
+    var Label = props.label;
+    var root = R.useRef(null);
+    var body = R.useRef(null);
+    var placed = R.useRef(false);
+
+    useFrame(function (state, delta) {
+      var g = root.current;
+      if (!g) return;
+      var live = (window.__cardinalPeers && window.__cardinalPeers.list) || [];
+      var target = null;
+      for (var i = 0; i < live.length; i++) {
+        if (live[i].id === peer.id) { target = live[i]; break; }
+      }
+      if (!target) return;
+      if (!placed.current) {
+        g.position.x = target.x; g.position.z = target.z; g.rotation.y = target.yaw;
+        placed.current = true;
+      } else {
+        // critically damped-ish follow; frame-rate independent
+        var k = 1 - Math.pow(0.0016, delta);
+        g.position.x += (target.x - g.position.x) * k;
+        g.position.z += (target.z - g.position.z) * k;
+        var d = target.yaw - g.rotation.y;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        g.rotation.y += d * k;
+      }
+      if (body.current) {
+        var bob = target.moving ? Math.abs(Math.sin(state.clock.elapsedTime * 9.5)) * 0.06 : 0;
+        body.current.position.y = 1.02 + bob;
+      }
+    });
+
+    return J.jsxs("group", { ref: root, children: [
+      // contact shadow
+      J.jsxs("mesh", {
+        position: [0, 0.03, 0],
+        rotation: [-Math.PI / 2, 0, 0],
+        children: [
+          J.jsx("circleGeometry", { args: [0.6, 16] }),
+          J.jsx("meshBasicMaterial", { color: "#020816", transparent: true, opacity: 0.38, depthWrite: false })
+        ]
+      }, "sh"),
+      J.jsxs("group", { ref: body, position: [0, 1.02, 0], children: [
+        J.jsxs("mesh", {
+          castShadow: true,
+          scale: [0.6, 1.2, 0.5],
+          children: [
+            J.jsx("capsuleGeometry", { args: [0.4, 0.8, 5, 9] }),
+            J.jsx("meshStandardMaterial", {
+              color: visual.cloak, emissive: visual.color, emissiveIntensity: 0.16,
+              roughness: 0.5, metalness: 0.22
+            })
+          ]
+        }, "b"),
+        J.jsxs("mesh", {
+          castShadow: true,
+          position: [0, 0.94, 0],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.33, 22, 16] }),
+            J.jsx("meshStandardMaterial", { map: tex, color: "#ffffff", roughness: 0.56 })
+          ]
+        }, "h"),
+        J.jsxs("mesh", {
+          castShadow: true,
+          position: [0, 1.0, 0.04],
+          scale: [1.08, 0.9, 1.06],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.335, 14, 11] }),
+            J.jsx("meshStandardMaterial", { color: "#26202a", roughness: 0.8 })
+          ]
+        }, "hr")
+      ] }, "body"),
+      J.jsx(Cursor, { pk: peer.pkStatus, y: 2.62, phase: (peer.id % 10) * 0.7 }, "cur"),
+      Label
+        ? J.jsx(Label, {
+            center: true, distanceFactor: 11, position: [0, 3.1, 0],
+            style: { pointerEvents: "none", whiteSpace: "nowrap" },
+            children: J.jsxs("div", {
+              className: "avatar-label avatar-label--peer avatar-label--" + (peer.pkStatus || "white"),
+              children: [J.jsx("span", { children: visual.crest }), peer.name]
+            })
+          }, "lb")
+        : null
+    ] });
+  }
+
+  function Peers(props) {
+    var tex = props.tex;
+    var palette = props.colours;
+    var Label = props.label;
+    var max = props.max || 20;
+    var state0 = R.useState([]);
+    var list = state0[0];
+    var setList = state0[1];
+
+    R.useEffect(function () {
+      var stop = false;
+      function tick() {
+        if (stop) return;
+        var live = (window.__cardinalPeers && window.__cardinalPeers.list) || [];
+        var next = live.slice(0, max).map(function (p) {
+          return { id: p.id, name: p.name, classId: p.classId, pkStatus: p.pkStatus };
+        });
+        setList(function (prev) {
+          // only re-render when the roster itself changes; positions are
+          // interpolated per frame and must not churn React
+          if (prev.length === next.length) {
+            var same = true;
+            for (var i = 0; i < prev.length; i++) {
+              if (prev[i].id !== next[i].id || prev[i].pkStatus !== next[i].pkStatus) { same = false; break; }
+            }
+            if (same) return prev;
+          }
+          return next;
+        });
+      }
+      var timer = setInterval(tick, 900);
+      tick();
+      return function () { stop = true; clearInterval(timer); };
+    }, [max]);
+
+    var items = [];
+    for (var i = 0; i < list.length; i++) {
+      var peer = list[i];
+      var visual = palette[peer.classId] || palette[1];
+      items.push(J.jsx(Peer, { peer: peer, tex: tex, visual: visual, label: Label }, peer.id));
+    }
+    return J.jsxs("group", { children: items });
+  }
+
+  return { Head: Head, Hair: Hair, Face: Face, Outfit: Outfit, Peers: Peers, Cursor: Cursor };
 }
