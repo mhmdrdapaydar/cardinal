@@ -159,6 +159,27 @@ else
 fi
 echo
 
+echo "history is dropped once the realm empties"
+req sA 1001 POST 'route=sync' '{"name":"Kirito","floor":3,"location":"city","x":0,"z":0}' >/dev/null
+req sA 1001 POST 'route=chat/send' '{"name":"Kirito","body":"پیام قبل از خالی شدن"}' >/dev/null
+BEFORE=$(req sA 1001 GET 'route=chat' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["messages"]))')
+if [[ "$BEFORE" -gt 0 ]]; then
+  printf '  \033[32mok\033[0m   a message exists while someone is online\n'; pass=$((pass+1))
+else
+  printf '  \033[31mFAIL\033[0m expected chat history before the realm empties\n'; fail=$((fail+1))
+fi
+age_presence 120           # everyone stops sending heartbeats
+req sA 1001 POST 'route=sync' '{"name":"Kirito","floor":3,"location":"city","x":0,"z":0}' >/dev/null
+AFTER=$(req sA 1001 GET 'route=chat' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["messages"]))')
+check "the transcript is cleared when the last player returns to an empty realm" "0" "$AFTER"
+req sB 1002 POST 'route=sync' '{"name":"Asuna","floor":3,"location":"city","x":0,"z":0}' >/dev/null
+req sB 1002 POST 'route=chat/send' '{"name":"Asuna","body":"پیام بعد از پاکسازی"}' >/dev/null
+KEPT=$(req sA 1001 GET 'route=chat' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["messages"]))')
+check "chat works again straight after the wipe" "1" "$KEPT"
+STILL=$(req sA 1001 POST 'route=sync' '{"name":"Kirito","floor":3,"location":"city","x":0,"z":0}')
+reject "an occupied realm is never wiped" '"messages":[]' "$STILL"
+echo
+
 echo "isolation from the game"
 if grep -qE "cardinal_game|CardinalGame|lib/bootstrap|mysql:|players\b.*SET|UPDATE players" "$ROOT/realtime.php"; then
   printf '  \033[31mFAIL\033[0m realtime.php reaches into the game layer\n'; fail=$((fail+1))

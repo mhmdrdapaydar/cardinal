@@ -26,7 +26,8 @@
   var SYNC_MS = 900;         // heartbeat; the server expires a player after 60s
   var CHAT_MS = 2600;        // chat poll while the window is open
   var CHAT_IDLE_MS = 9000;   // chat poll while it is collapsed
-  var ME_MS = 20000;         // refresh display identity
+  var ME_MS = 20000;         // refresh display identity once we have one
+  var ME_RETRY_MS = 2500;    // while signed out, ask again quickly
   var MAX_CHARS = 240;
 
   var base = new URL("realtime.php", location.href).href;
@@ -142,7 +143,7 @@
 
   // ------------------------------------------------------------------ chat
   function pollChat() {
-    if (!state.me || !state.available) return;
+    if (!state.me || !state.available || !inGame()) return;
     call("chat", state.lastChatId ? { query: "after=" + state.lastChatId } : null)
       .then(function (data) {
         var incoming = data.messages || [];
@@ -162,7 +163,7 @@
   }
 
   function send(body) {
-    if (!state.me) return Promise.reject(new Error("no identity"));
+    if (!state.me) return Promise.reject(new Error("هنوز وارد بازی نشده‌اید."));
     return call("chat/send", {
       body: { body: body, name: state.me.name, classId: state.me.classId, pkStatus: state.me.pkStatus },
     }).then(function () { pollChat(); });
@@ -279,22 +280,76 @@
   }
 
   // ------------------------------------------------------------------ boot
+  //
+  // Identity is NOT read once. The script can load while the login screen is
+  // still up, in which case api.php?route=me has no player yet; a single
+  // attempt would leave the panel permanently without an identity and every
+  // send would fail. So it keeps asking until it gets one, and keeps checking
+  // afterwards so a logout is noticed too.
+  var identityTimer = null;
+
+  function applyIdentity(me) {
+    var had = !!state.me;
+    state.me = me;
+    if (me && !had) {
+      sync();
+      pollChat();
+      if (!syncTimer) syncTimer = setInterval(sync, SYNC_MS);
+    }
+    if (!me && had) {
+      // signed out: drop the session view so nothing is posted as a ghost
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      state.peers = [];
+      window.__cardinalPeers = { list: [], at: performance.now(), room: null };
+    }
+    updateVisibility();
+  }
+
+  // Poll fast while there is no identity -- the script can load on the login
+  // screen, and the player may sign in at any moment -- then back off once one
+  // is in hand.
+  function chaseIdentity() {
+    readMe().then(applyIdentity).catch(function () { applyIdentity(null); }).then(scheduleIdentity);
+  }
+
+  function scheduleIdentity() {
+    if (identityTimer) clearTimeout(identityTimer);
+    identityTimer = setTimeout(chaseIdentity, state.me ? ME_MS : ME_RETRY_MS);
+  }
+
+  // The panel belongs to the game, not to the landing page: it only appears
+  // once the shell is mounted and an identity exists.
+  function inGame() {
+    return !!document.querySelector(".game-shell") && !!state.me;
+  }
+
+  var sawShell = false;
+  function updateVisibility() {
+    if (!el.root) return;
+    var shell = !!document.querySelector(".game-shell");
+    // The moment the shell appears, ask for an identity right away instead of
+    // waiting for the next retry tick, so chat is usable as soon as the player
+    // is in the world.
+    if (shell && !sawShell) { sawShell = true; if (!state.me) chaseIdentity(); }
+    if (!shell) sawShell = false;
+
+    var show = shell && !!state.me;
+    el.root.classList.toggle("cnet--ready", show);
+    if (!show && state.open) toggle(false);
+  }
+
   function start() {
     build();
     renderChat();
     renderRoster();
+    updateVisibility();
 
-    readMe().then(function (me) {
-      state.me = me;
-      if (!me) return;      // signed out: leave the panel dormant
-      sync();
-      pollChat();
-      syncTimer = setInterval(sync, SYNC_MS);
-      setInterval(function () { pollChat(); }, CHAT_MS);
-      setInterval(function () {
-        readMe().then(function (fresh) { if (fresh) state.me = fresh; });
-      }, ME_MS);
-    });
+    chaseIdentity();
+    // The shell mounts after the bundle boots and unmounts on logout, so watch
+    // for it rather than assuming it is there.
+    setInterval(updateVisibility, 1200);
+
+    setInterval(function () { pollChat(); }, CHAT_MS);
 
     // Stop the heartbeat while the tab is hidden; the server expires us after
     // 60s and other players stop seeing a ghost standing still.

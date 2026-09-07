@@ -875,18 +875,23 @@ input:focus {
 
 .cnet [hidden] { display: none !important; }
 
+/* Hidden until the game shell is mounted and an identity exists; the script
+   toggles .cnet--ready. The base rule must not set a display of its own, or it
+   would override the hidden state simply by coming later in the file. */
 .cnet {
   position: fixed;
   bottom: 18px;
   left: 18px;
   z-index: 40;
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   direction: rtl;
 }
+
+.cnet.cnet--ready { display: flex; }
 
 .cnet__tab {
   display: inline-flex;
@@ -1035,9 +1040,17 @@ input:focus {
   .cnet { left: 294px; }
 }
 
-/* phones: the D-pad owns the bottom-left, so move across */
+/* Phones stack three things along the bottom: .mobile-nav (61px + safe area),
+   the arrival caption on the right and the D-pad on the left. Measured on a
+   412x892 viewport the caption reaches y 721 and the D-pad y 698, and the gap
+   between them is only 67px wide -- too narrow for the tab. So it sits above
+   the pair instead. */
 @media (max-width: 760px) {
-  .cnet { left: auto; right: 12px; bottom: 12px; }
+  .cnet {
+    left: auto;
+    right: 12px;
+    bottom: calc(206px + env(safe-area-inset-bottom));
+  }
   .cnet__panel { width: min(330px, calc(100vw - 24px)); }
   .cnet__log { height: 190px; }
 }

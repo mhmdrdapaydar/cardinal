@@ -20,7 +20,7 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260907-online-2`
+## Release `20260907-online-3`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
 
@@ -52,8 +52,11 @@ The only thing it borrows from the game is identity: the player id already on th
 - **Players see each other.** Anyone on the same floor *and* the same side of the gate is in the same room. Position, heading and a moving flag are exchanged about once a second, and each remote avatar interpolates toward its target every frame, so movement reads as walking rather than teleporting.
 - **A player who stops sending heartbeats disappears after 60 seconds**, and the heartbeat stops as soon as the tab is hidden, so a backgrounded browser does not leave a ghost standing in the plaza.
 - **Rooms split into lobbies of 50.** The split is a stable slice, so the same people stay together between polls instead of reshuffling.
+- **The transcript is dropped once the realm empties.** On each heartbeat the service counts who is still live *before* recording the caller; if that count is zero, the realm had gone quiet and the whole chat table is deleted. An idle server therefore carries no history at all, and a busy one is never touched.
 - **Chat** keeps the last 100 messages, trims its file at 400, caps a message at 240 characters and rate-limits one message every 1.2 seconds per player.
 - **The SAO colour cursor** floats above every head, yours included, driven by the `pk_status` the database already stores: green for a normal player, orange for a criminal, red for a killer. The same colour repeats beside each chat line.
+
+The chat window belongs to the game, not to the site: it stays hidden until the game shell is mounted *and* an identity exists, so it never appears on the login page. On phones it clears the bottom nav, the D-pad and the arrival caption — measured, not guessed.
 
 The client for all of this is `assets/cardinal-net-*.js`, loaded by `index.html` and deliberately **outside** the game bundle, so presence and chat cannot break the React tree. It needs no hook into the render loop: the shipped camera controller already publishes the avatar's position on the canvas every frame as `data-cardinal-avatar` and `data-cardinal-heading`.
 
@@ -103,7 +106,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260907-online-2.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260907-online-3.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

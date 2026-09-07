@@ -244,6 +244,18 @@ if ($route === 'sync') {
     $yaw = rt_float($in['yaw'] ?? null, -7.0, 7.0);
     $moving = !empty($in['moving']) ? 1 : 0;
 
+    // If nobody at all was still live when this player arrived, the realm had
+    // emptied out: drop the transcript so an idle server does not carry chat
+    // history forever. Checked BEFORE the upsert, otherwise this player's own
+    // fresh row would always make the realm look occupied.
+    $cutBefore = $now - RT_PRESENCE_TTL;
+    $liveBefore = (int) $db->query('SELECT COUNT(*) FROM presence WHERE seen_at >= ' . $cutBefore)->fetchColumn();
+    if ($liveBefore === 0) {
+        $db->exec('DELETE FROM chat');
+        $db->exec('DELETE FROM sqlite_sequence WHERE name = \'chat\'');
+        $db->exec('DELETE FROM presence');
+    }
+
     $db->prepare('INSERT INTO presence
             (player_id, name, class_id, pk_status, floor, location, x, z, yaw, moving, seen_at)
          VALUES (:p, :n, :c, :k, :f, :l, :x, :z, :y, :m, :t)
@@ -259,7 +271,7 @@ if ($route === 'sync') {
     // Drop anyone who stopped sending heartbeats. Occasional, not every call.
     if (($now % 7) === 0) {
         $db->prepare('DELETE FROM presence WHERE seen_at < :cut')
-           ->execute([':cut' => $now - (RT_PRESENCE_TTL * 10)]);
+           ->execute([':cut' => $now - RT_PRESENCE_TTL]);
     }
 
     $cut = $now - RT_PRESENCE_TTL;
