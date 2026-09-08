@@ -1244,6 +1244,8 @@ final class CardinalGame
             case 'exit-city': return $this->exitCity($playerId);
             case 'return-city': return $this->returnCity($playerId, false);
             case 'force-return-city': return $this->returnCity($playerId, true);
+            case 'use-floor-crystal': return $this->useFloorCrystal($playerId);
+            case 'use-return-lock': return $this->useReturnLock($playerId);
             case 'teleport': return $this->teleport($playerId, $payload['floor'] ?? null);
             case 'hunt': return $this->hunt($playerId);
             case 'dungeon': return $this->dungeon($playerId);
@@ -1348,10 +1350,84 @@ final class CardinalGame
                 $minutes = max(0, (int) floor(($cityCooldown->getTimestamp() - self::now()->getTimestamp()) / 60));
                 throw new GameException('مسیر بازگشت هنوز ' . (int) floor($minutes / 60) . ' ساعت و ' . ($minutes % 60) . ' دقیقه باقی مانده است. برای بازگشت فوری، کریستال اجباری با هزینه ' . $forcedCost . 'C استفاده کنید.');
             }
-            $fee = $forced ? $forcedCost : ($this->isNoble($player) ? 0 : self::integer($player['current_floor']) * 400);
+            // The bot charges current_floor * 50 to walk back in, and twice that
+            // for the forced crystal. The web release had 400 here, eight times
+            // the shared rule.
+            $fee = $forced ? $forcedCost : ($this->isNoble($player) ? 0 : self::integer($player['current_floor']) * 50);
             if (self::integer($player['coins']) < $fee) throw new GameException('موجودی سکه کافی نیست؛ هزینه بازگشت ' . $fee . 'C است.');
             $this->execute("UPDATE players SET current_location = 'city', coins = coins - ?, city_entry_cooldown_until = ? WHERE player_id = ?", [$fee, $forced ? null : ($player['city_entry_cooldown_until'] ?? null), $playerId]);
             return self::event('success', $forced ? 'کریستال تلپورت فعال شد' : 'ورود به منطقه امن', 'به شهر طبقه ' . self::integer($player['current_floor']) . ' بازگشتید.', ['rewards' => ['coins' => -$fee]]);
+        });
+    }
+
+    /**
+     * Floor teleport crystal (item 3).
+     *
+     * Ported from rubika.py: usable only while the walk back to the city is
+     * still on cooldown, sends the player to a random unlocked floor and a
+     * random side of the gate, clears the cooldown and consumes one crystal.
+     * Nothing is refunded and no fee is charged.
+     *
+     * @return array<string, mixed>
+     */
+    private function useFloorCrystal(int $playerId): array
+    {
+        return $this->transaction(function () use ($playerId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $cooldown = self::dateValue($player['city_entry_cooldown_until'] ?? null);
+            if (!$cooldown || $cooldown <= self::now()) {
+                throw new GameException('در حال حاضر نیازی به کریستال تلپورت طبقات ندارید؛ می‌توانید به‌صورت عادی به شهر بازگردید.');
+            }
+            $owned = $this->one('SELECT quantity FROM inventory WHERE player_id = ? AND item_id = 3 AND quantity > 0', [$playerId]);
+            if (!$owned) throw new GameException('کریستال تلپورت طبقات در کوله‌پشتی شما موجود نیست.');
+
+            $maxFloor = max(1, self::integer($player['last_floor_unlocked']));
+            $newFloor = 1 + (int) floor(self::random() * $maxFloor);
+            if ($newFloor > $maxFloor) $newFloor = $maxFloor;
+            $newLocation = self::random() < 0.5 ? 'city' : 'wild';
+
+            $this->execute(
+                'UPDATE players SET current_floor = ?, current_location = ?, city_entry_cooldown_until = NULL WHERE player_id = ?',
+                [$newFloor, $newLocation, $playerId]
+            );
+            $this->execute('UPDATE inventory SET quantity = quantity - 1 WHERE player_id = ? AND item_id = 3', [$playerId]);
+            $this->execute('DELETE FROM inventory WHERE player_id = ? AND item_id = 3 AND quantity <= 0', [$playerId]);
+            // The web build binds party lobbies to a floor, which the bot has no
+            // equivalent of; leaving one behind on the old floor would strand it.
+            $this->removeWrongFloorLobbies($playerId, $newFloor);
+
+            $where = $newLocation === 'city' ? 'داخل شهر' : 'بیرون از شهر';
+            return self::event('success', 'کریستال تلپورت طبقات فعال شد',
+                'فضا پیچ خورد و شما به طبقه ' . $newFloor . ' (' . $where . ') منتقل شدید.');
+        });
+    }
+
+    /**
+     * Quick-return lock (item 15).
+     *
+     * Ported from rubika.py: usable only during the cooldown, puts the player
+     * straight inside the city of the floor they are already on, free of
+     * charge, and consumes one lock.
+     *
+     * @return array<string, mixed>
+     */
+    private function useReturnLock(int $playerId): array
+    {
+        return $this->transaction(function () use ($playerId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $cooldown = self::dateValue($player['city_entry_cooldown_until'] ?? null);
+            if (!$cooldown || $cooldown <= self::now()) {
+                throw new GameException('در حال حاضر نیازی به قفل بازگشت سریع ندارید؛ می‌توانید به‌صورت عادی به شهر بازگردید.');
+            }
+            $owned = $this->one('SELECT quantity FROM inventory WHERE player_id = ? AND item_id = 15 AND quantity > 0', [$playerId]);
+            if (!$owned) throw new GameException('قفل بازگشت سریع در کوله‌پشتی شما موجود نیست.');
+
+            $this->execute("UPDATE players SET current_location = 'city', city_entry_cooldown_until = NULL WHERE player_id = ?", [$playerId]);
+            $this->execute('UPDATE inventory SET quantity = quantity - 1 WHERE player_id = ? AND item_id = 15', [$playerId]);
+            $this->execute('DELETE FROM inventory WHERE player_id = ? AND item_id = 15 AND quantity <= 0', [$playerId]);
+
+            return self::event('success', 'قفل بازگشت سریع فعال شد',
+                'بدون پرداخت عوارض، وارد شهر طبقه ' . self::integer($player['current_floor']) . ' شدید.');
         });
     }
 
@@ -1619,7 +1695,7 @@ final class CardinalGame
             if (!$this->hasInventorySpace($player)) throw new GameException('ظرفیت کوله‌پشتی شما پر است.');
             $price = self::integer($item['price_coins']);
             if (($player['class_name'] ?? '') === 'Blacksmith') $price = (int) floor($price * 0.8);
-            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.95);
+            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.75);
             if (self::integer($player['coins']) < $price) throw new GameException('سکه کافی نیست؛ به ' . $price . 'C نیاز دارید.');
             $this->execute('UPDATE players SET coins = coins - ? WHERE player_id = ?', [$price, $playerId]);
             $this->addInventory($playerId, $itemId);
@@ -1644,7 +1720,7 @@ final class CardinalGame
             }
             $price = self::integer($craft['base_price']);
             if (($player['class_name'] ?? '') === 'Blacksmith') $price = (int) floor($price * 0.8);
-            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.95);
+            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.75);
             if (self::integer($player['coins']) < $price) throw new GameException('سکه کافی نیست؛ به ' . $price . 'C نیاز دارید.');
             $this->execute('UPDATE players SET coins = coins - ? WHERE player_id = ?', [$price, $playerId]);
             $this->execute('INSERT INTO player_crafted_items (craft_item_id, owner_player_id, current_power, upgrade_level) VALUES (?, ?, ?, 0)', [$craftItemId, $playerId, self::num($craft['base_power'])]);

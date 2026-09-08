@@ -20,9 +20,30 @@ This is the web-only **server 5** release. It runs on ordinary static/PHP hostin
 
 Socket.IO presence was deliberately removed because a static/PHP host has no persistent Socket.IO process. This affects only the non-authoritative nearby-avatar display. Movement remains available locally in the 3D scene and every game command remains an authoritative PHP/API transaction.
 
-## Release `20260907-places-2`
+## Release `20260908-parity-1`
 
 Two parts, and the distinction matters if you run several Cardinal servers against the same database.
+
+### Parity with rubika.py
+
+The bot source was read directly and the web release brought in line with it. Three of these are corrections to values that were mis-ported, so **they change the economy and should be reviewed before deploying**:
+
+| | bot (`rubika.py`) | web, before | web, now |
+| --- | --- | --- | --- |
+| Merchant shop discount | `price * 0.75` | `price * 0.95` | `price * 0.75` |
+| Merchant craftable discount | `price * 0.75` | `price * 0.95` | `price * 0.75` |
+| City entry fee | `current_floor * 50` | `current_floor * 400` | `current_floor * 50` |
+
+The Blacksmith discount (`* 0.80`) and the forced-crystal cost (`current_floor * 100`, i.e. twice the entry fee) already matched and were left alone, as was the six-hour walk-back cooldown.
+
+Two consumables the bot has and the web never implemented are now ported, both usable only while the walk back to the city is still on cooldown:
+
+- **`use-floor-crystal`** (item 3, کریستال تلپورت طبقات) — sends the player to a random unlocked floor and a random side of the gate, clears the cooldown, consumes one crystal, charges nothing. It also drops any party lobby left behind on the old floor; the web binds lobbies to a floor and the bot has no equivalent, so that part is web-only bookkeeping.
+- **`use-return-lock`** (item 15, قفل بازگشت سریع) — puts the player straight inside the city of the floor they are on, free, consumes one lock.
+
+Both appear in the wild sidebar next to the forced-return button while the cooldown is running.
+
+The backpack is reachable outside the city again, matching the bot's wild keypad, which carries «موجودی من». Discarding stays a safe-zone action by explicit request, so the discard buttons are hidden out there rather than offered and refused — `lib/Game.php` enforces it either way.
 
 ### Behaviour changes — read this before deploying
 
@@ -111,7 +132,7 @@ To rebuild the upload archive after a change:
 python3 tools/make_upload_zip.py
 ```
 
-It writes `cardinal-web-server5-20260907-places-2.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
+It writes `cardinal-web-server5-20260908-parity-1.zip` containing only what the upload procedure needs, then verifies the result: every asset reference in `index.html` and every chunk-to-chunk import must resolve inside the archive, `.htaccess` must be present, each material map must ship with its `-hi` companion, no build tooling may leak in, and the PHP logic files must be byte-identical to the working tree.
 
 `build_graphics_release.py` keeps pristine copies of the shipped bundles in `tools/bundle-originals/`, so it always patches from a clean base and can be re-run safely. Each of its 26 edits asserts that its anchor matches exactly once and aborts before writing anything if the build ever changes. It then re-hashes the changed bundles, rewrites `index.html` and the mutual chunk references, and refreshes the `cardinal-current-*` aliases.
 

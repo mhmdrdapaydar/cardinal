@@ -239,6 +239,70 @@ def world_patches(*, marker: str, helper: str, quality: str) -> list[tuple[str, 
 # the wild sidebar is left exactly as shipped. The equipment panel still works
 # outside the city, because that only needed the inventory *read* to be
 # permitted -- not the panel itself.
+# --------------------------------------------------------------------------
+# Logic parity with rubika.py, client side.
+#
+# The bot's wild keypad carries "موجودی من", so the backpack belongs outside
+# the city too. Discarding stays a safe-zone action by explicit request, so the
+# discard buttons are hidden out there rather than offered and refused --
+# lib/Game.php still enforces it either way.
+# --------------------------------------------------------------------------
+PARITY_SHARED = [
+    (
+        "backpack reachable outside the city",
+        '["inventory","shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
+        '["shop","quests","social","guild","job","crafting","noble","leaderboard","account","teleport"]',
+    ),
+    (
+        "backpack in the wild sidebar",
+        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},{panel:"party"',
+        '{panel:"equipment",icon:"\u2694\ufe0f",label:"\u062a\u062c\u0647\u06cc\u0632\u0627\u062a"},'
+        '{panel:"inventory",icon:"\U0001f392",label:"\u0645\u0648\u062c\u0648\u062f\u06cc"},{panel:"party"',
+    ),
+]
+
+DISCARD = "\u062f\u0648\u0631 \u0627\u0646\u062f\u0627\u062e\u062a\u0646"
+
+PARITY_MODERN = [
+    (
+        "hide item discard outside the city",
+        'l.jsx(T,{tone:"danger",onClick:()=>y({type:"item",id:c.itemId,name:c.itemName,max:c.quantity}),'
+        f'children:"{DISCARD}"}})',
+        'e.location==="city"&&l.jsx(T,{tone:"danger",onClick:()=>y({type:"item",id:c.itemId,name:c.itemName,max:c.quantity}),'
+        f'children:"{DISCARD}"}})',
+    ),
+    (
+        "hide material discard outside the city",
+        'l.jsx(T,{tone:"danger",onClick:()=>y({type:"mini",id:c.miniItemId,name:c.name,max:c.quantity}),'
+        f'children:"{DISCARD}"}})',
+        'e.location==="city"&&l.jsx(T,{tone:"danger",onClick:()=>y({type:"mini",id:c.miniItemId,name:c.name,max:c.quantity}),'
+        f'children:"{DISCARD}"}})',
+    ),
+    (
+        "escape items during the city cooldown",
+        'Qn&&l.jsx("button",{className:"action-button",disabled:_==="force-return-city",onClick:()=>void I("force-return-city"),children:"💎 بازگشت فوری"})',
+        'Qn&&l.jsx("button",{className:"action-button",disabled:_==="force-return-city",onClick:()=>void I("force-return-city"),children:"💎 بازگشت فوری"}),Qn&&l.jsx("button",{className:"action-button",disabled:_==="use-floor-crystal",onClick:()=>void I("use-floor-crystal"),children:"🔮 کریستال تلپورت طبقات"}),Qn&&l.jsx("button",{className:"action-button",disabled:_==="use-return-lock",onClick:()=>void I("use-return-lock"),children:"🔐 قفل بازگشت سریع"})',
+    ),
+]
+
+PARITY_LEGACY = [
+    (
+        "hide item discard outside the city",
+        'ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"item",id:e.itemId,name:e.itemName,max:e.quantity})},'
+        f'children:"{DISCARD}"}})',
+        '"city"===n.location&&ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"item",id:e.itemId,name:e.itemName,max:e.quantity})},'
+        f'children:"{DISCARD}"}})',
+    ),
+    (
+        "hide material discard outside the city",
+        'ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"mini",id:e.miniItemId,name:e.name,max:e.quantity})},'
+        f'children:"{DISCARD}"}})',
+        '"city"===n.location&&ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"mini",id:e.miniItemId,name:e.name,max:e.quantity})},'
+        f'children:"{DISCARD}"}})',
+    ),
+]
+
+
 SHARED_UI_PATCHES: list[tuple[str, str, str]] = []
 
 DROP = "\u062f\u0648\u0631 \u0627\u0646\u062f\u0627\u062e\u062a\u0646"                     # "discard"
@@ -282,7 +346,7 @@ LEGACY_UI_PATCHES = [
         '!e.equipped&&ce.jsxs("div",{className:"row-actions",children:['
         'e.isTradeable&&ce.jsx(op,{tone:"ghost",onClick:function(){return m({type:"crafted",id:e.instanceId,name:e.itemName})},'
         f'children:"{TRANSFER}"}}),'
-        'ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"crafted",id:e.instanceId,name:e.itemName,max:1})},'
+        '"city"===n.location&&ce.jsx(op,{tone:"danger",onClick:function(){return w({type:"crafted",id:e.instanceId,name:e.itemName,max:1})},'
         f'children:"{DROP}"}})]}})',
     ),
     (
@@ -636,8 +700,8 @@ PATCHES: dict[str, list[tuple[str, str, str]]] = {
             'f.jsx(di,{count:44,scale:[22,8,22],position:[0,2,0],size:2.4,speed:.22,color:"#baffec"})',
         ),
     ],
-    MAIN: SHARED_UI_PATCHES + MODERN_UI_PATCHES,
-    MAIN_LEGACY: SHARED_UI_PATCHES + LEGACY_UI_PATCHES,
+    MAIN: SHARED_UI_PATCHES + PARITY_SHARED + PARITY_MODERN + MODERN_UI_PATCHES,
+    MAIN_LEGACY: SHARED_UI_PATCHES + PARITY_SHARED + PARITY_LEGACY + LEGACY_UI_PATCHES,
     WORLD_LEGACY: LEGACY_PLACE_MOUNTS + WALL_LEGACY + AVATAR_LEGACY + _tex(FACE_LEGACY) + _tex(SIGIL_LEGACY) + _tex(PEERS_LEGACY) + _tex(GATE_LEGACY) + [
         (
             "texture tier + cel-shading installer",

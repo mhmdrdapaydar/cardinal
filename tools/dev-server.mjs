@@ -65,7 +65,11 @@ const player = () => ({
   referralCode: "WEBDEMO5",
   referralCount: 3,
   accountSaved: true,
-  cooldowns: { hunt: null, dungeon: null, cityEntry: null, boss: null, teamBoss: null },
+  cooldowns: { hunt: null, dungeon: null,
+    // in the wild the mock reports an active walk-back cooldown, so the
+    // forced-return and consumable-escape buttons are exercised
+    cityEntry: state.location === "wild" ? new Date(Date.now() + 3 * 3600e3).toISOString() : null,
+    boss: null, teamBoss: null },
 });
 
 const state = { location: "city" };
@@ -134,6 +138,8 @@ function leaderboard(kind, page) {
 }
 
 function action(name) {
+  if (name === "exit-city") state.location = "wild";
+  if (name === "return-city" || name === "use-return-lock" || name === "force-return-city") state.location = "city";
   if (name === "exit-city") { state.location = "wild"; return { kind: "warning", title: "خروج از شهر", text: "شما وارد منطقه ناامن شدید.", refresh: true }; }
   if (name === "return-city" || name === "force-return-city") { state.location = "city"; return { kind: "success", title: "ورود به منطقه امن", text: "به شهر بازگشتید.", refresh: true }; }
   return { kind: "info", title: "پیش‌نمایش", text: "این فرمان در پیش‌نمایش شبیه‌سازی می‌شود.", refresh: false };

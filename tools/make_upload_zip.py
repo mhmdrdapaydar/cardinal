@@ -31,7 +31,7 @@ import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PACKAGE = "20260907-places-2"
+PACKAGE = "20260908-parity-1"
 
 INCLUDE_FILES = [
     ".htaccess",
