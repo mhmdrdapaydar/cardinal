@@ -94,10 +94,10 @@ const ROUTES = {
       { itemId: 1, itemName: "شمشیر عیار نوآموز", description: "سلاح تیز و برنده طبقه اول", typeId: 1, typeName: "سلاح", quantity: 1, priceCoins: 150, equipped: true },
       { itemId: 3, itemName: "کریستال تلپورت طبقات", description: "آیتم جادویی برای جابه‌جایی سریع", typeId: 3, typeName: "مصرفی", quantity: 2, priceCoins: 100, equipped: false },
     ],
-    miniItems: [{ miniItemId: 1, name: "سنگِ مهتاب", description: "ماده اولیه کمیاب", quantity: 3 }],
+    miniItems: [{ miniItemId: 1, name: "سنگِ مهتاب", description: "ماده اولیه کمیاب", quantity: 3, priceCoins: 80 }],
     craftedItems: [
-      { instanceId: 9001, craftItemId: 1, itemName: "تیغهٔ سپیده‌دم", itemType: "weapon", currentPower: 240, upgradeLevel: 3, isTradeable: true, isUpgradeable: true, equipped: false },
-      { instanceId: 9002, craftItemId: 2, itemName: "جوشن ماه‌تاب", itemType: "armor", currentPower: 180, upgradeLevel: 1, isTradeable: false, isUpgradeable: true, equipped: false },
+      { instanceId: 9001, craftItemId: 1, itemName: "تیغهٔ سپیده‌دم", itemType: "weapon", currentPower: 240, upgradeLevel: 3, isTradeable: true, isUpgradeable: true, basePrice: 900, priceType: "coins", equipped: false },
+      { instanceId: 9002, craftItemId: 2, itemName: "جوشن ماه‌تاب", itemType: "armor", currentPower: 180, upgradeLevel: 1, isTradeable: false, isUpgradeable: true, basePrice: 700, priceType: "coins", equipped: false },
     ],
   }),
   shop: () => ({
