@@ -1,0 +1,1141 @@
+/* ==========================================================================
+   Cardinal — cinematic graphics layer  (cardinal-fx)
+   ==========================================================================
+   Appended after the built stylesheet. Presentation only: this file adds no
+   markup, reads no game state and changes no rule. Every selector here already
+   exists in the built UI; nothing is renamed, no element is repositioned in a
+   way that could hide a control.
+
+   Layout-affecting properties are deliberately avoided. Touch controls, the
+   sidebar and the notification stack keep their original geometry and hit
+   areas so Android input behaviour is unchanged.
+
+   Sections
+     01  design tokens
+     02  world - screen-space bloom, aerial depth, vignette
+     03  world - cinematic shimmer rework (god rays, aurora, grain)
+     04  world - holographic HUD, signs, avatar labels
+     05  world - boot / loading / fallback
+     06  shell - topbar, sidebar, navigation
+     07  panels, cards, buttons
+     08  toasts
+     09  auth screen
+     10  mobile + touch controls
+     11  accessibility and quality-tier guards
+   ========================================================================== */
+
+/* -- 01  design tokens ---------------------------------------------------- */
+:root {
+  --fx-cyan: #6fd6ff;
+  --fx-cyan-soft: rgba(111, 214, 255, .55);
+  --fx-cyan-faint: rgba(111, 214, 255, .16);
+  --fx-gold: #f6c568;
+  --fx-gold-soft: rgba(246, 197, 104, .5);
+  --fx-violet: #a58cff;
+  --fx-mint: #6ce0bd;
+
+  --fx-glass: linear-gradient(148deg, rgba(21, 39, 70, .82), rgba(9, 19, 37, .88));
+  --fx-glass-line: rgba(150, 205, 255, .26);
+  --fx-glow-cyan: 0 0 22px rgba(84, 178, 255, .22);
+  --fx-glow-gold: 0 0 20px rgba(246, 197, 104, .2);
+  --fx-lift: 0 18px 44px rgba(2, 7, 18, .5);
+
+  --fx-ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+/* -- 02  world: screen-space bloom, aerial depth, vignette ---------------- */
+.world {
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 12%, #12294d 0%, #0a1730 42%, #050c18 100%);
+}
+
+/* Approximated bloom.
+   A real bloom pass thresholds the frame, blurs it and adds it back. CSS has
+   no threshold, so `contrast()` stands in for one: it crushes everything below
+   mid-grey to black (which contributes nothing under `screen`) while pushing
+   lamps, the fountain crown and emissive crystals over the top. The blurred
+   result is then screen-blended at partial strength.
+
+   Cost: a full-screen backdrop blur recomputed per frame. It is therefore
+   restricted to the high tier only -- and if the device cannot hold frame
+   rate, the shipped auto-downgrade drops to `balanced`, which removes this
+   layer automatically. */
+.world::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s var(--fx-ease);
+}
+
+.world:has(.world-cinematic-shimmer--high)::before {
+  opacity: .58;
+  -webkit-backdrop-filter: blur(9px) contrast(5.2) brightness(.28) saturate(1.55);
+  backdrop-filter: blur(9px) contrast(5.2) brightness(.28) saturate(1.55);
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(ellipse 96% 88% at 50% 46%, rgba(0, 0, 0, .95), rgba(0, 0, 0, .5) 82%);
+  mask-image: radial-gradient(ellipse 96% 88% at 50% 46%, rgba(0, 0, 0, .95), rgba(0, 0, 0, .5) 82%);
+}
+
+/* Vignette + warm/cool split tone + aerial haze along the horizon. Replaces
+   the flat bottom gradient the build shipped with. */
+.world::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  height: auto;
+  pointer-events: none;
+  background:
+    radial-gradient(1.4px 1.4px at 11% 7%, rgba(255,255,255,.85), transparent),
+    radial-gradient(1px 1px at 23% 14%, rgba(214,232,255,.7), transparent),
+    radial-gradient(1.6px 1.6px at 34% 5%, rgba(255,255,255,.9), transparent),
+    radial-gradient(1px 1px at 44% 17%, rgba(198,224,255,.6), transparent),
+    radial-gradient(1.2px 1.2px at 56% 9%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1px 1px at 63% 20%, rgba(214,232,255,.55), transparent),
+    radial-gradient(1.7px 1.7px at 72% 6%, rgba(255,255,255,.9), transparent),
+    radial-gradient(1px 1px at 81% 15%, rgba(198,224,255,.65), transparent),
+    radial-gradient(1.3px 1.3px at 89% 4%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1px 1px at 95% 19%, rgba(214,232,255,.5), transparent),
+    radial-gradient(1.1px 1.1px at 6% 22%, rgba(255,255,255,.6), transparent),
+    radial-gradient(1.4px 1.4px at 17% 27%, rgba(224,240,255,.5), transparent),
+    radial-gradient(1px 1px at 50% 25%, rgba(255,255,255,.45), transparent),
+    radial-gradient(1.2px 1.2px at 77% 26%, rgba(224,240,255,.5), transparent),
+    radial-gradient(ellipse 124% 98% at 50% 44%, transparent 52%, rgba(3, 8, 19, .17) 82%, rgba(2, 6, 15, .4) 100%),
+    linear-gradient(0deg, rgba(2, 8, 18, .34) 0%, transparent 19%),
+    linear-gradient(180deg, rgba(10, 26, 52, .2) 0%, transparent 17%),
+    linear-gradient(96deg, rgba(255, 196, 108, .03) 0%, transparent 36%, rgba(96, 176, 255, .04) 100%);
+}
+
+
+.world canvas {
+  filter: saturate(1.26) contrast(1.085) brightness(1.02);
+}
+
+/* -- 03  world: cinematic shimmer rework ---------------------------------- */
+.world-cinematic-shimmer {
+  z-index: 2;
+}
+
+/* god rays + aurora ribbons */
+.world-cinematic-shimmer::before {
+  top: -22%;
+  right: -22%;
+  bottom: -22%;
+  left: -22%;
+  background:
+    radial-gradient(ellipse 46% 38% at 52% 14%, rgba(126, 209, 255, .2), transparent 66%),
+    radial-gradient(ellipse 36% 28% at 79% 72%, rgba(255, 199, 112, .1), transparent 64%),
+    radial-gradient(ellipse 32% 26% at 17% 66%, rgba(165, 140, 255, .08), transparent 66%),
+    conic-gradient(from 196deg at 52% 6%,
+      transparent 0deg, rgba(139, 216, 255, .05) 9deg, transparent 19deg,
+      transparent 26deg, rgba(139, 216, 255, .035) 31deg, transparent 40deg,
+      transparent 48deg, rgba(196, 232, 255, .045) 54deg, transparent 63deg),
+    linear-gradient(122deg, transparent 18%, rgba(122, 223, 255, .035) 44%, transparent 68%);
+  filter: blur(7px);
+  animation: fx-glow-drift 17s ease-in-out infinite alternate;
+}
+
+/* scanlines + a slow specular sweep across the frame */
+.world-cinematic-shimmer::after {
+  opacity: .22;
+  background:
+    repeating-linear-gradient(0deg, rgba(181, 226, 255, .06) 0 1px, transparent 1px 5px),
+    linear-gradient(104deg, transparent 22%, rgba(190, 232, 255, .045) 47%, transparent 72%);
+  background-size: auto, 260% 100%;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .5), transparent 58%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .5), transparent 58%);
+  animation: fx-scan 13s linear infinite, fx-sweep 11s ease-in-out infinite;
+}
+
+.world-cinematic-shimmer--high { opacity: .8; }
+.world-cinematic-shimmer--balanced { opacity: .58; }
+
+@keyframes fx-glow-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-1.6%, .9%, 0) scale(1.035); }
+  100% { transform: translate3d(1.4%, -1.1%, 0) scale(1.015); }
+}
+@keyframes fx-scan { to { background-position-y: 128px, 0; } }
+@keyframes fx-sweep {
+  0%, 100% { background-position-x: 0, 0%; }
+  50%      { background-position-x: 0, 100%; }
+}
+
+/* -- 04  world: holographic HUD ------------------------------------------ */
+.world-hud { z-index: 6; }
+
+.world-hud__hint,
+.world-hud__status,
+.world-hud__realm {
+  position: relative;
+  border-color: rgba(140, 205, 255, .3);
+  background: var(--fx-glass);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, .34),
+    inset 0 1px rgba(255, 255, 255, .1),
+    var(--fx-glow-cyan);
+  -webkit-backdrop-filter: blur(15px) saturate(1.25);
+  backdrop-filter: blur(15px) saturate(1.25);
+}
+
+/* corner brackets — the SAO-style frame, drawn with gradients only */
+.world-hud__hint::before,
+.world-hud__status::before,
+.world-hud__realm::before,
+.world-caption::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1px;
+  background:
+    linear-gradient(120deg, var(--fx-cyan-soft), transparent 26%, transparent 74%, var(--fx-gold-soft));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: .85;
+}
+
+.world-hud__status b { text-shadow: 0 0 12px rgba(255, 200, 96, .55); }
+.world-hud__realm i {
+  background: radial-gradient(circle at 34% 28%, rgba(146, 243, 206, .34), rgba(20, 62, 52, .5));
+  box-shadow: inset 0 0 10px rgba(146, 243, 206, .3), 0 0 12px rgba(108, 224, 189, .18);
+}
+
+.world-hud kbd {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03));
+  box-shadow: inset 0 -1px rgba(255, 255, 255, .1), 0 1px 2px rgba(0, 0, 0, .35);
+}
+
+/* realm caption */
+.world-caption {
+  position: absolute;
+  z-index: 5;
+  padding: 10px 14px 10px 16px;
+  border: 0;
+  border-radius: 14px;
+  border-right: 2px solid transparent;
+  background: linear-gradient(270deg, rgba(9, 20, 39, .74), rgba(9, 20, 39, 0));
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.world-caption::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, transparent, var(--fx-gold), rgba(255, 224, 150, .1));
+  box-shadow: 0 0 12px rgba(246, 197, 104, .65);
+}
+.world-caption b {
+  background: linear-gradient(180deg, #fff8e2, #f3c979 78%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 3px 12px rgba(246, 197, 104, .28));
+}
+
+/* in-scene signage and nameplates */
+.world-sign {
+  border-color: rgba(246, 197, 104, .55);
+  background: linear-gradient(150deg, rgba(28, 40, 64, .84), rgba(14, 24, 42, .86));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .42), 0 0 16px rgba(246, 197, 104, .16), inset 0 1px rgba(255, 255, 255, .09);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  text-shadow: 0 0 10px rgba(248, 212, 125, .4);
+}
+.world-sign--danger {
+  border-color: rgba(120, 226, 184, .5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .42), 0 0 16px rgba(105, 205, 167, .18), inset 0 1px rgba(255, 255, 255, .09);
+  text-shadow: 0 0 10px rgba(150, 240, 205, .4);
+}
+.world-sign--portal {
+  border-color: rgba(134, 198, 255, .55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .42), 0 0 18px rgba(96, 170, 255, .22), inset 0 1px rgba(255, 255, 255, .09);
+}
+
+.avatar-label {
+  border-color: rgba(150, 205, 255, .38);
+  background: linear-gradient(150deg, rgba(10, 22, 42, .82), rgba(6, 14, 28, .86));
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .4), 0 0 14px rgba(84, 178, 255, .14);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.avatar-label--self {
+  border-color: rgba(246, 197, 104, .62);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .4), 0 0 16px rgba(246, 197, 104, .26);
+  text-shadow: 0 0 9px rgba(255, 225, 156, .5);
+}
+
+.world-interact {
+  filter: drop-shadow(0 0 14px rgba(120, 200, 255, .35));
+}
+
+/* camera reset control */
+.world-camera-reset {
+  border-color: rgba(150, 205, 255, .3) !important;
+  background: var(--fx-glass) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .36), var(--fx-glow-cyan) !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition: transform .18s var(--fx-ease), box-shadow .18s var(--fx-ease);
+}
+.world-camera-reset:hover {
+  transform: rotate(-45deg) scale(1.06);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .4), 0 0 22px rgba(111, 214, 255, .34) !important;
+}
+
+/* -- 05  world: boot / loading / fallback -------------------------------- */
+.world-boot-overlay {
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(38, 74, 132, .5), transparent 58%),
+    rgba(5, 11, 23, .74);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.world-boot-card {
+  position: relative;
+  border: 1px solid var(--fx-glass-line);
+  background: var(--fx-glass);
+  box-shadow: var(--fx-lift), inset 0 1px rgba(255, 255, 255, .07);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+.world-boot-card::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--fx-cyan), var(--fx-gold), transparent);
+  background-size: 200% 100%;
+  animation: fx-loadbar 1.9s linear infinite;
+}
+.world-boot-card__sigil {
+  color: var(--fx-gold);
+  text-shadow: 0 0 20px rgba(246, 197, 104, .55);
+  animation: fx-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes fx-loadbar { to { background-position: -200% 0; } }
+@keyframes fx-pulse {
+  50% { transform: scale(1.16); filter: brightness(1.25); }
+}
+
+.world-loading,
+.webgl-fallback {
+  background:
+    radial-gradient(ellipse at 52% 36%, #24406f 0%, #0a1424 58%, #050a13 100%);
+}
+.webgl-fallback > span {
+  text-shadow: 0 0 26px rgba(246, 197, 104, .45);
+  animation: fx-pulse 3s ease-in-out infinite;
+}
+
+/* -- 06  shell: topbar, sidebar, navigation ------------------------------ */
+.game-shell {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(28, 54, 98, .34), transparent 62%),
+    #060e1b;
+}
+
+.topbar {
+  border-bottom-color: rgba(140, 195, 255, .16);
+  background: linear-gradient(180deg, rgba(11, 22, 41, .95), rgba(7, 14, 28, .9));
+  box-shadow: 0 4px 22px rgba(0, 0, 0, .3), inset 0 -1px rgba(150, 205, 255, .08);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+.topbar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--fx-cyan-faint) 22%, rgba(246, 197, 104, .22) 50%, var(--fx-cyan-faint) 78%, transparent);
+}
+
+.logo-mark {
+  background: linear-gradient(135deg, #ffe6a4, #f6c568 42%, #a66d2c);
+  box-shadow:
+    0 0 0 4px rgba(246, 197, 104, .1),
+    0 8px 22px rgba(0, 0, 0, .34),
+    0 0 24px rgba(246, 197, 104, .24),
+    inset 0 1px rgba(255, 255, 255, .5);
+}
+
+.coin-pill {
+  border-color: rgba(246, 197, 104, .32);
+  background: linear-gradient(135deg, rgba(178, 122, 32, .24), rgba(96, 64, 16, .14));
+  box-shadow: inset 0 1px rgba(255, 226, 160, .16), var(--fx-glow-gold);
+}
+.coin-pill span { filter: drop-shadow(0 0 8px rgba(246, 197, 104, .6)); }
+
+.location-chip,
+.floor-chip,
+.demo-chip {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .08), 0 2px 10px rgba(0, 0, 0, .2);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.icon-button {
+  background: linear-gradient(150deg, rgba(96, 132, 190, .16), rgba(20, 36, 62, .3));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .07);
+  transition: transform .18s var(--fx-ease), border-color .18s, box-shadow .18s, background .18s;
+}
+.icon-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(246, 197, 104, .55);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .1), var(--fx-glow-gold);
+}
+
+.sidebar {
+  border-left-color: rgba(140, 195, 255, .14);
+  background: linear-gradient(180deg, rgba(14, 28, 51, .97), rgba(7, 15, 29, .99));
+  box-shadow: -14px 0 34px rgba(0, 0, 0, .22), inset 1px 0 rgba(150, 205, 255, .07);
+}
+
+.player-avatar {
+  background: radial-gradient(circle at 34% 28%, #5470a8, #17263e 72%);
+  box-shadow:
+    0 0 0 1px rgba(246, 197, 104, .2),
+    0 0 20px rgba(246, 197, 104, .18),
+    inset 0 2px 8px rgba(255, 255, 255, .1);
+}
+
+.progress {
+  background: rgba(10, 22, 42, .78);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5);
+}
+.progress i {
+  background: linear-gradient(90deg, #4c7ee8, #7cc9ff 62%, #b6ecff);
+  box-shadow: 0 0 12px rgba(124, 201, 255, .8), inset 0 1px rgba(255, 255, 255, .45);
+}
+.progress i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .38), transparent);
+  background-size: 200% 100%;
+  animation: fx-shine 2.6s linear infinite;
+}
+@keyframes fx-shine { to { background-position: -200% 0; } }
+
+.nav-item {
+  position: relative;
+  transition: background .18s var(--fx-ease), color .18s, transform .18s var(--fx-ease);
+}
+.nav-item:hover {
+  transform: translateX(-2px);
+  background: linear-gradient(270deg, rgba(96, 150, 220, .16), transparent);
+}
+.nav-item--active {
+  border-color: rgba(124, 190, 255, .26);
+  background: linear-gradient(270deg, rgba(72, 130, 210, .3), rgba(42, 79, 133, .1));
+  box-shadow: inset -2px 0 var(--fx-cyan), 0 0 18px rgba(84, 178, 255, .12);
+}
+.nav-item--active > span { filter: drop-shadow(0 0 7px rgba(111, 214, 255, .6)); }
+
+.action-button {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .07);
+  transition: transform .16s var(--fx-ease), background .16s, box-shadow .16s;
+}
+.action-button:hover { box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 6px 16px rgba(0, 0, 0, .3); }
+.action-button--travel:hover { box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 0 18px rgba(101, 217, 181, .24); }
+.action-button--hunt:hover   { box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 0 18px rgba(248, 159, 87, .26); }
+.action-button--boss:hover   { box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 0 18px rgba(237, 97, 135, .26); }
+
+/* -- 07  panels, cards, buttons ------------------------------------------ */
+.panel-layer__backdrop {
+  background: rgba(3, 8, 17, .3);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.game-panel {
+  border-color: var(--fx-glass-line);
+  background: linear-gradient(157deg, rgba(24, 41, 70, .95), rgba(9, 19, 37, .96));
+  box-shadow: var(--fx-lift), inset 0 1px rgba(255, 255, 255, .07), 0 0 0 1px rgba(84, 178, 255, .05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+  animation: fx-panel-in .3s var(--fx-ease);
+}
+@keyframes fx-panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+.panel-header {
+  position: relative;
+  border-bottom-color: rgba(150, 205, 255, .13);
+}
+.panel-header::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  bottom: -1px;
+  left: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(246, 197, 104, .34), transparent);
+}
+.panel-icon {
+  background: linear-gradient(150deg, rgba(246, 197, 104, .18), rgba(246, 197, 104, .04));
+  box-shadow: inset 0 1px rgba(255, 226, 160, .18), var(--fx-glow-gold);
+}
+.panel-heading h2 {
+  background: linear-gradient(180deg, #f4f9ff, #b9cdea);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #4184dd, #27579c);
+  box-shadow: 0 5px 14px rgba(4, 12, 30, .3), inset 0 1px rgba(255, 255, 255, .18);
+}
+.button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .2) 50%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform .55s var(--fx-ease);
+}
+.button:hover:not(:disabled)::after { transform: translateX(120%); }
+.button--gold  { background: linear-gradient(135deg, #f3c46a, #a2652c); box-shadow: 0 5px 14px rgba(120, 74, 22, .3), inset 0 1px rgba(255, 244, 214, .4); }
+.button--danger{ background: linear-gradient(135deg, #cc5069, #82293f); box-shadow: 0 5px 14px rgba(80, 18, 34, .3), inset 0 1px rgba(255, 214, 222, .22); }
+.button--ghost { background: rgba(72, 114, 178, .15); box-shadow: inset 0 1px rgba(255, 255, 255, .07); }
+
+.hero-card {
+  border-color: rgba(140, 190, 250, .24);
+  background:
+    radial-gradient(ellipse at 82% 12%, rgba(120, 176, 255, .16), transparent 52%),
+    linear-gradient(128deg, rgba(58, 92, 150, .32), rgba(30, 44, 76, .3));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .07);
+}
+.avatar-crest {
+  background: radial-gradient(circle at 30% 24%, #5878b0, #17263f 74%);
+  box-shadow: inset 0 0 24px rgba(247, 205, 110, .2), 0 0 22px rgba(246, 197, 104, .14);
+}
+
+.boss-card {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .06), 0 0 30px rgba(208, 58, 94, .1);
+}
+.boss-card h3 { text-shadow: 0 0 18px rgba(255, 130, 160, .35); }
+
+.noble-card {
+  box-shadow: inset 0 1px rgba(255, 226, 160, .12), 0 0 26px rgba(246, 197, 104, .1);
+}
+.noble-card--active {
+  animation: fx-noble 4.5s ease-in-out infinite;
+}
+@keyframes fx-noble {
+  50% { box-shadow: inset 0 1px rgba(255, 226, 160, .18), 0 0 38px rgba(246, 197, 104, .2); }
+}
+
+.party-code b {
+  text-shadow: 0 0 20px rgba(255, 221, 136, .5);
+}
+.portal-illustration {
+  box-shadow: 0 0 40px rgba(78, 178, 255, .2), inset 0 0 40px rgba(78, 178, 255, .16);
+}
+.rank--1 { box-shadow: 0 0 14px rgba(246, 197, 104, .26); }
+
+.item-glyph,
+.equipment-slot__icon,
+.quest-card__icon,
+.product-card__icon {
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .4));
+}
+
+/* -- 08  toasts ----------------------------------------------------------- */
+.toast {
+  border-color: rgba(160, 205, 255, .26);
+  background: linear-gradient(150deg, rgba(18, 34, 58, .95), rgba(10, 21, 39, .95));
+  box-shadow: var(--fx-lift), inset 0 1px rgba(255, 255, 255, .07);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  animation: fx-toast-in .32s var(--fx-ease);
+}
+.toast::before { box-shadow: 0 0 12px currentColor; }
+.toast--success::before { color: var(--fx-mint); }
+.toast--danger::before  { color: #fb7185; }
+.toast--warning::before { color: var(--fx-gold); }
+.toast-rewards span {
+  border: 1px solid rgba(246, 197, 104, .2);
+  box-shadow: 0 0 10px rgba(246, 197, 104, .1);
+}
+@keyframes fx-toast-in {
+  from { opacity: 0; transform: translate(-18px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* -- 09  auth screen ------------------------------------------------------ */
+.auth-world {
+  background: radial-gradient(ellipse at 56% 27%, #35569a, #162c54 30%, #080f20 70%, #04070f);
+}
+.auth-world__stars { animation: fx-twinkle 6s ease-in-out infinite alternate; }
+@keyframes fx-twinkle { 50% { opacity: .95; } }
+
+.auth-castle { filter: drop-shadow(0 22px 38px rgba(0, 0, 0, .7)) drop-shadow(0 0 44px rgba(96, 158, 255, .12)); }
+.castle-wall::after { box-shadow: 0 0 34px rgba(255, 210, 105, .32) inset; }
+
+.auth-world__caption strong {
+  background: linear-gradient(180deg, #ffffff, #b7cdf2 62%, #8fb0e0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 6px 22px rgba(0, 0, 0, .8));
+}
+
+.auth-card {
+  border-color: rgba(160, 200, 255, .2);
+  background: linear-gradient(148deg, rgba(25, 41, 70, .97), rgba(9, 19, 37, .99));
+  box-shadow: -26px 28px 68px rgba(0, 0, 0, .4), inset 0 1px rgba(255, 255, 255, .07), 0 0 0 1px rgba(84, 178, 255, .05);
+}
+.auth-tab--active {
+  background: linear-gradient(135deg, #2f68ad, #2a4d88);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .34), inset 0 1px rgba(255, 255, 255, .16);
+}
+.class-choice {
+  transition: transform .16s var(--fx-ease), border-color .16s, box-shadow .16s, background .16s;
+}
+.class-choice:hover { box-shadow: 0 8px 18px rgba(0, 0, 0, .28); }
+.class-choice--selected {
+  box-shadow: 0 0 20px rgba(246, 197, 104, .18), inset 0 1px rgba(255, 226, 160, .16);
+}
+.auth-submit {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f0bd57, #a3662e);
+  box-shadow: 0 10px 26px rgba(165, 100, 38, .3), inset 0 1px rgba(255, 244, 214, .45);
+}
+.auth-submit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .34) 50%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform .6s var(--fx-ease);
+}
+.auth-submit:hover::after { transform: translateX(120%); }
+
+input:focus {
+  border-color: rgba(120, 205, 250, .9);
+  box-shadow: 0 0 0 3px rgba(66, 145, 238, .16), 0 0 18px rgba(84, 178, 255, .14);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(150, 205, 255, .34), rgba(110, 150, 210, .22));
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(170, 215, 255, .45); }
+
+/* -- 10  mobile + touch controls ------------------------------------------ */
+@media (max-width: 760px) {
+  .world::after {
+    background:
+      radial-gradient(ellipse 130% 96% at 50% 46%, transparent 46%, rgba(3, 8, 19, .26) 78%, rgba(2, 6, 15, .52) 100%),
+      linear-gradient(0deg, rgba(2, 8, 18, .5) 0%, transparent 22%);
+  }
+  .world-caption { padding: 8px 11px 8px 13px; }
+}
+
+/* Geometry, hit area, z-index and pointer behaviour are intentionally left
+   exactly as shipped — only the skin changes. */
+.world .touch-controls button,
+.world .touch-controls__button {
+  border-color: rgba(180, 220, 255, .42);
+  background:
+    radial-gradient(circle at 34% 22%, rgba(120, 176, 244, .4), rgba(10, 25, 47, .93) 68%);
+  box-shadow:
+    0 0 0 1px rgba(104, 177, 255, .12),
+    0 10px 24px rgba(0, 0, 0, .42),
+    inset 0 1px rgba(255, 255, 255, .2),
+    0 0 16px rgba(84, 178, 255, .1);
+  text-shadow: 0 0 8px rgba(180, 226, 255, .5);
+}
+.world .touch-controls__button--active,
+.world .touch-controls button:active {
+  box-shadow:
+    0 0 0 3px rgba(246, 197, 104, .2),
+    0 10px 25px rgba(0, 0, 0, .45),
+    inset 0 1px rgba(255, 253, 226, .4),
+    0 0 22px rgba(255, 210, 120, .34);
+}
+
+.mobile-nav {
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+
+/* -- 11  accessibility and quality-tier guards ---------------------------- */
+
+/* The low tier is the device-saver path: no bloom, no shimmer, no animation
+   loops. It must stay as cheap as the original build. */
+.world:has(.world-cinematic-shimmer--low)::before,
+.world:has(.world-cinematic-shimmer--balanced)::before { display: none; }
+.world-cinematic-shimmer--low { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .world-cinematic-shimmer::before,
+  .world-cinematic-shimmer::after,
+  .world-boot-card::after,
+  .world-boot-card__sigil,
+  .webgl-fallback > span,
+  .progress i::after,
+  .auth-world__stars,
+  .noble-card--active,
+  .game-panel,
+  .toast {
+    animation: none !important;
+  }
+  .button::after,
+  .auth-submit::after { transition: none; }
+}
+
+/* Browsers without :has() simply skip the bloom layer above; give them the
+   shimmer treatment alone rather than a broken frame. */
+@supports not (selector(:has(*))) {
+  .world::before { display: none; }
+}
+
+/* No backdrop-filter (older Firefox): fall back to a plain translucent glass
+   so panels never turn unreadable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .world-hud__hint,
+  .world-hud__status,
+  .world-hud__realm,
+  .game-panel,
+  .toast,
+  .topbar,
+  .world-boot-card {
+    background: rgba(10, 21, 40, .96);
+  }
+  .world::before { display: none; }
+}
+
+/* ==========================================================================
+   12  SAO system layer — angular "Cardinal system" interface
+   ==========================================================================
+   Pushes the HUD from generic dark-glass towards the Sword Art Online
+   system-window language: clipped corners instead of rounded ones, hairline
+   cyan rules, small-caps latin system labels, and a faint hologram flicker.
+
+   Purely cosmetic. No element is moved, resized or removed, every hit area
+   keeps its original box, and the touch controls stay round because they are
+   thumb targets.
+   ========================================================================== */
+
+/* clipped "system window" corners */
+.world-hud__hint,
+.world-hud__status,
+.world-hud__realm {
+  border-radius: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.game-panel {
+  border-radius: 2px;
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+}
+
+.toast {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.auth-card {
+  clip-path: polygon(24px 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%, 0 24px);
+}
+
+/* hairline system rules that read as a scanning frame */
+.world-hud__hint::after,
+.world-hud__status::after,
+.world-hud__realm::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 12%;
+  left: 12%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--fx-cyan), transparent);
+  opacity: .7;
+}
+
+/* the HP/XP bar gets the SAO cut-off end */
+.progress {
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+.progress i {
+  border-radius: 0;
+  background: linear-gradient(90deg, #2f7fe0, #6fd6ff 58%, #dff4ff);
+}
+
+/* nav items as system list rows */
+.nav-item {
+  border-radius: 0 3px 3px 0;
+}
+.nav-item--active {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+
+/* system-window headers */
+.panel-header {
+  position: relative;
+}
+.panel-icon {
+  border-radius: 3px;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* buttons: angular, with a bright leading edge */
+.button,
+.auth-submit,
+.auth-tab {
+  border-radius: 2px;
+}
+.button::before,
+.auth-submit::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, .55);
+  opacity: .55;
+}
+
+/* faint hologram flicker across the whole HUD — very low amplitude so it
+   reads as a live system window rather than a broken screen */
+.world-hud,
+.world-caption {
+  animation: fx-holo 7.5s steps(1, end) infinite;
+}
+@keyframes fx-holo {
+  0%, 96%, 100% { opacity: 1; }
+  97%           { opacity: .93; }
+  98%           { opacity: 1; }
+  99%           { opacity: .96; }
+}
+
+/* latin system labels in the HUD read as small-caps telemetry */
+.world-hud kbd {
+  border-radius: 2px;
+  font-family: "Segoe UI", Tahoma, monospace;
+  letter-spacing: .06em;
+}
+
+.world-sign,
+.avatar-label {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* the player's own nameplate gets the SAO cursor colour */
+.avatar-label--self {
+  border-color: rgba(120, 224, 255, .7);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .4), 0 0 18px rgba(111, 214, 255, .34);
+  text-shadow: 0 0 10px rgba(190, 240, 255, .6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-hud,
+  .world-caption { animation: none; }
+}
+
+/* ==========================================================================
+   13  realtime layer — chat window and online roster
+   ==========================================================================
+   Styles the panel created by cardinal-net.js. That script lives outside the
+   game bundle and creates its own DOM, so nothing here touches a React class.
+
+   Placement avoids the two controls that already own screen corners: the
+   sidebar (right, RTL) and the touch D-pad (bottom-left on phones).
+   ========================================================================== */
+
+.cnet [hidden] { display: none !important; }
+
+/* Hidden until the game shell is mounted and an identity exists; the script
+   toggles .cnet--ready. The base rule must not set a display of its own, or it
+   would override the hidden state simply by coming later in the file. */
+.cnet {
+  position: fixed;
+  bottom: 18px;
+  left: 18px;
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  direction: rtl;
+}
+
+.cnet.cnet--ready { display: flex; }
+
+.cnet__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid rgba(150, 205, 255, .3);
+  border-radius: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  background: var(--fx-glass);
+  color: var(--ink, #eef4ff);
+  font: 700 12px inherit;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .38), var(--fx-glow-cyan);
+  -webkit-backdrop-filter: blur(15px) saturate(1.2);
+  backdrop-filter: blur(15px) saturate(1.2);
+  transition: transform .16s var(--fx-ease), border-color .16s;
+}
+.cnet__tab:hover { transform: translateY(-1px); border-color: rgba(246, 197, 104, .5); }
+.cnet__tab-icon { color: var(--fx-cyan); font-size: 13px; }
+
+.cnet__badge {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: #e0556f;
+  color: #fff;
+  font: 700 10px inherit;
+  text-align: center;
+}
+
+.cnet__panel {
+  width: min(360px, calc(100vw - 36px));
+  border: 1px solid var(--fx-glass-line);
+  background: var(--fx-glass);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  box-shadow: var(--fx-lift), inset 0 1px rgba(255, 255, 255, .07);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+  animation: fx-panel-in .22s var(--fx-ease);
+}
+
+.cnet__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid rgba(150, 205, 255, .14);
+}
+.cnet__head::after {
+  content: "";
+  position: absolute;
+  margin-top: 28px;
+  width: 0;
+}
+.cnet__title { color: var(--fx-gold); font: 700 12px inherit; }
+.cnet__meta { flex: 1; color: var(--muted, #96a4bd); font-size: 10px; }
+.cnet__close {
+  border: 0;
+  background: none;
+  color: var(--muted, #96a4bd);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.cnet__close:hover { color: var(--ink, #eef4ff); }
+
+.cnet__log {
+  height: 232px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overscroll-behavior: contain;
+}
+.cnet__empty { margin: auto; color: var(--muted, #96a4bd); font-size: 11px; }
+
+.cnet__line {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #dbe6f7;
+}
+.cnet__line b { color: #b9d3f2; font-weight: 700; }
+.cnet__line--self b { color: var(--fx-gold); }
+.cnet__line time { color: #64748f; font-size: 9px; }
+.cnet__line span { word-break: break-word; }
+
+/* the SAO cursor colour, repeated next to every message */
+.cnet__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  align-self: center;
+}
+.cnet--green  { background: #58d98f; box-shadow: 0 0 7px rgba(88, 217, 143, .8); }
+.cnet--orange { background: #f0a24a; box-shadow: 0 0 7px rgba(240, 162, 74, .8); }
+.cnet--red    { background: #f0554f; box-shadow: 0 0 7px rgba(240, 85, 79, .85); }
+
+.cnet__form {
+  display: flex;
+  gap: 7px;
+  padding: 9px 12px 11px;
+  border-top: 1px solid rgba(150, 205, 255, .12);
+}
+.cnet__input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(150, 205, 255, .22);
+  border-radius: 3px;
+  background: rgba(8, 17, 33, .8);
+  color: var(--ink, #eef4ff);
+  font: 400 12px inherit;
+}
+.cnet__input:focus {
+  outline: 0;
+  border-color: rgba(120, 205, 250, .85);
+  box-shadow: 0 0 0 3px rgba(66, 145, 238, .14);
+}
+.cnet__send {
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #4184dd, #27579c);
+  color: #fff;
+  font: 700 11px inherit;
+  cursor: pointer;
+}
+.cnet__note {
+  display: block;
+  padding: 0 14px 10px;
+  color: #f2a0a8;
+  font-size: 10px;
+  min-height: 12px;
+}
+
+/* the shell is RTL with a 276px sidebar in grid column 2, which lands on the
+   left, so clear it once the sidebar is on screen */
+@media (min-width: 981px) {
+  .cnet { left: 294px; }
+}
+
+/* Phones stack three things along the bottom: .mobile-nav (61px + safe area),
+   the arrival caption on the right and the D-pad on the left. Measured on a
+   412x892 viewport the caption reaches y 721 and the D-pad y 698, and the gap
+   between them is only 67px wide -- too narrow for the tab. So it sits above
+   the pair instead. */
+@media (max-width: 760px) {
+  .cnet {
+    left: auto;
+    right: 12px;
+    bottom: calc(206px + env(safe-area-inset-bottom));
+  }
+  .cnet__panel { width: min(330px, calc(100vw - 24px)); }
+  .cnet__log { height: 190px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cnet__panel { animation: none; }
+  .cnet__tab { transition: none; }
+}
+
+/* peer nameplates carry the same cursor colour as the marker above them */
+.avatar-label--peer { border-color: rgba(150, 205, 255, .32); }
+.avatar-label--white  { box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 14px rgba(88, 217, 143, .3); }
+.avatar-label--orange { border-color: rgba(240, 162, 74, .6); box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 15px rgba(240, 162, 74, .34); }
+.avatar-label--red    { border-color: rgba(240, 85, 79, .65);  box-shadow: 0 3px 12px rgba(0,0,0,.4), 0 0 16px rgba(240, 85, 79, .4); }
+
+/* ==========================================================================
+   14  teleport panel — an actual gate instead of an emoji
+   ==========================================================================
+   The build rendered a 🌀 glyph in a circle. This keeps the same single
+   element and builds the portal out of it: a spun conic swirl, two counter
+   rotating rune rings and a bright core. The glyph is hidden rather than
+   removed, so nothing in the component changes.
+   ========================================================================== */
+
+.portal-illustration {
+  position: relative;
+  height: 150px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: transparent;
+  font-size: 0;
+  text-shadow: none;
+  animation: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* swirl + core */
+.portal-illustration::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #eaf9ff 0%, rgba(150, 226, 255, .85) 9%, rgba(78, 178, 255, .35) 26%, transparent 58%),
+    conic-gradient(from 0deg,
+      rgba(122, 214, 255, 0) 0deg, rgba(122, 214, 255, .5) 34deg, rgba(122, 214, 255, 0) 72deg,
+      rgba(122, 214, 255, 0) 90deg, rgba(168, 232, 255, .42) 124deg, rgba(122, 214, 255, 0) 162deg,
+      rgba(122, 214, 255, 0) 180deg, rgba(122, 214, 255, .5) 214deg, rgba(122, 214, 255, 0) 252deg,
+      rgba(122, 214, 255, 0) 270deg, rgba(168, 232, 255, .42) 304deg, rgba(122, 214, 255, 0) 342deg);
+  -webkit-mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 78%);
+  mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 78%);
+  animation: fx-portal-spin 7s linear infinite;
+  filter: blur(.4px);
+}
+
+/* containment rings, counter rotating, with tick marks */
+.portal-illustration::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 148px;
+  height: 148px;
+  margin: -74px 0 0 -74px;
+  border-radius: 50%;
+  border: 1px solid rgba(150, 226, 255, .5);
+  background:
+    repeating-conic-gradient(from 0deg,
+      rgba(198, 240, 255, .75) 0deg 1.1deg, transparent 1.1deg 9deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 62%, #000 65%, #000 72%, transparent 75%);
+  mask-image: radial-gradient(circle, transparent 62%, #000 65%, #000 72%, transparent 75%);
+  animation: fx-portal-spin 19s linear infinite reverse;
+  box-shadow: 0 0 34px rgba(78, 178, 255, .3), inset 0 0 26px rgba(78, 178, 255, .22);
+}
+
+@keyframes fx-portal-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-illustration::before,
+  .portal-illustration::after { animation: none; }
+}

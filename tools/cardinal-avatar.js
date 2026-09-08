@@ -1,0 +1,627 @@
+/**
+ * Cardinal — detailed avatar parts.
+ * =============================================================================
+ * Replaces the blobbiest pieces of the shipped avatar (hair, face) and layers
+ * an outfit over it. Injected into both world chunks by
+ * tools/build_graphics_release.py as an ES5 factory, so one source serves the
+ * modern and the legacy bundle.
+ *
+ * ES5 ONLY. No arrow functions, no let/const, no template literals, no spread.
+ *
+ * WHAT IS DELIBERATELY LEFT ALONE
+ * -------------------------------
+ * The avatar's skeleton -- the limb groups driven by refs in the walk cycle,
+ * the body capsule, the ground shadow, the name label height and the point
+ * light -- is untouched. Everything here either replaces a purely decorative
+ * mesh or is added as a new child, so the existing animation keeps working and
+ * the avatar's footprint and collision radius do not change.
+ *
+ * The character faces -Z: the cape sits at +Z and the eyes at -0.32Z.
+ */
+
+function cardinalMakeAvatar(J, R, useFrame) {
+  // ------------------------------------------------------------------ head
+  // Carries the painted face. Segment counts go up from 20x16 so the sphere is
+  // smooth enough that the texture does not visibly facet across the cheeks.
+  // The material colour is white: the skin tone lives in the texture, and
+  // multiplying it by a second skin colour would only darken it.
+  function Head(props) {
+    return J.jsxs("mesh", {
+      castShadow: true,
+      position: [0, 1.98, 0],
+      children: [
+        J.jsx("sphereGeometry", { args: [0.34, 36, 26] }),
+        J.jsx("meshStandardMaterial", { map: props.tex, color: "#ffffff", roughness: 0.56 })
+      ]
+    });
+  }
+
+  // ------------------------------------------------------------------ hair
+  // The build had a squashed hemisphere plus three blobs. Anime hair reads
+  // through its silhouette, so this is built from tapered locks: swept bangs
+  // over the brow, side locks past the jaw, and a ponytail with secondary
+  // motion that lags the body.
+  function Hair(props) {
+    var hair = props.hair;
+    var visual = props.visual;
+    var tail = R.useRef(null);
+    var bangs = R.useRef(null);
+    useFrame(function (state) {
+      var t = state.clock.elapsedTime;
+      if (tail.current) {
+        tail.current.rotation.x = 0.22 + Math.sin(t * 1.7) * 0.09;
+        tail.current.rotation.z = Math.sin(t * 1.15) * 0.07;
+      }
+      if (bangs.current) {
+        bangs.current.rotation.x = Math.sin(t * 1.45) * 0.022;
+      }
+    });
+
+    function lock(key, pos, rot, scale, len, tone) {
+      return J.jsxs("mesh", {
+        castShadow: true,
+        position: pos,
+        rotation: rot,
+        scale: scale,
+        children: [
+          J.jsx("coneGeometry", { args: [0.5, len, 5] }),
+          J.jsx("meshStandardMaterial", { color: tone || hair, roughness: 0.78, metalness: 0.06 })
+        ]
+      }, key);
+    }
+
+    var bangPieces = [];
+    var i;
+    // Five short, tapered locks lying against the brow. Cones pointing down
+    // read as spikes at this scale, so these are thin boxes angled forward.
+    for (i = 0; i < 5; i++) {
+      var f = (i - 2) / 2;
+      bangPieces.push(
+        J.jsxs("mesh", {
+          castShadow: true,
+          position: [f * 0.19, 2.155 - Math.abs(f) * 0.012, -0.255 + Math.abs(f) * 0.055],
+          rotation: [0.32, -f * 0.32, f * 0.3],
+          children: [
+            J.jsx("boxGeometry", { args: [0.12, 0.3, 0.09] }),
+            J.jsx("meshStandardMaterial", { color: hair, roughness: 0.78, metalness: 0.06 })
+          ]
+        }, "b" + i)
+      );
+    }
+    // short side locks along the cheek
+    bangPieces.push(J.jsxs("mesh", {
+      castShadow: true, position: [-0.28, 2.02, -0.13], rotation: [0.1, 0, -0.14],
+      children: [
+        J.jsx("boxGeometry", { args: [0.1, 0.34, 0.12] }),
+        J.jsx("meshStandardMaterial", { color: hair, roughness: 0.78 })
+      ]
+    }, "sl"));
+    bangPieces.push(J.jsxs("mesh", {
+      castShadow: true, position: [0.28, 2.02, -0.13], rotation: [0.1, 0, 0.14],
+      children: [
+        J.jsx("boxGeometry", { args: [0.1, 0.34, 0.12] }),
+        J.jsx("meshStandardMaterial", { color: hair, roughness: 0.78 })
+      ]
+    }, "sr"));
+
+    var tailPieces = [];
+    for (i = 0; i < 4; i++) {
+      var s = 1 - i * 0.19;
+      tailPieces.push(lock("t" + i, [0, -0.1 - i * 0.19, 0.03 + i * 0.07],
+                           [Math.PI - 0.22 - i * 0.1, 0, 0], [0.26 * s, 1, 0.22 * s], 0.32));
+    }
+
+    return J.jsxs("group", { children: [
+      // back volume of the hair, sitting over the skull
+      J.jsxs("mesh", {
+        castShadow: true,
+        position: [0, 2.19, 0.05],
+        scale: [1.1, 0.86, 1.08],
+        children: [
+          J.jsx("sphereGeometry", { args: [0.345, 18, 14] }),
+          J.jsx("meshStandardMaterial", { color: hair, roughness: 0.8, metalness: 0.05 })
+        ]
+      }, "cap"),
+      // a lighter sheen band, the painted highlight anime hair always has
+      J.jsxs("mesh", {
+        position: [0, 2.33, -0.02],
+        rotation: [Math.PI / 2, 0, 0],
+        scale: [1.06, 1.02, 1],
+        children: [
+          J.jsx("torusGeometry", { args: [0.235, 0.028, 5, 18, Math.PI * 1.15] }),
+          J.jsx("meshStandardMaterial", {
+            color: "#ffffff",
+            emissive: visual.glow,
+            emissiveIntensity: 0.35,
+            transparent: true,
+            opacity: 0.34,
+            roughness: 0.3
+          })
+        ]
+      }, "sheen"),
+      J.jsxs("group", { ref: bangs, children: bangPieces }, "bangs"),
+      J.jsxs("group", { ref: tail, position: [0, 2.2, 0.2], children: tailPieces }, "tail"),
+      // hair ornament
+      J.jsxs("mesh", {
+        position: [0.27, 2.28, -0.13],
+        rotation: [0, 0, 0.4],
+        children: [
+          J.jsx("octahedronGeometry", { args: [0.075, 0] }),
+          J.jsx("meshStandardMaterial", {
+            color: visual.color,
+            emissive: visual.glow,
+            emissiveIntensity: 1.9,
+            metalness: 0.8,
+            roughness: 0.12
+          })
+        ]
+      }, "pin")
+    ] });
+  }
+
+  // ------------------------------------------------------------------ face
+  // NOT MOUNTED. Superseded by the painted texture in make_avatar_face.py,
+  // which reads far better at this scale than geometry can. Kept for reference.
+  function Face(props) {
+    var visual = props.visual;
+    var hair = props.hair;
+    var eye = function (side) {
+      var x = side * 0.115;
+      return J.jsxs("group", { position: [x, 1.995, -0.3], children: [
+        // sclera
+        J.jsxs("mesh", {
+          scale: [0.052, 0.082, 0.03],
+          children: [
+            J.jsx("sphereGeometry", { args: [1, 10, 8] }),
+            J.jsx("meshStandardMaterial", { color: "#f7fbff", roughness: 0.42 })
+          ]
+        }, "s"),
+        // iris
+        J.jsxs("mesh", {
+          position: [0, -0.004, -0.026],
+          scale: [0.036, 0.058, 0.02],
+          children: [
+            J.jsx("sphereGeometry", { args: [1, 10, 8] }),
+            J.jsx("meshStandardMaterial", {
+              color: visual.color,
+              emissive: visual.glow,
+              emissiveIntensity: 1.5,
+              roughness: 0.24
+            })
+          ]
+        }, "i"),
+        // catch light
+        J.jsxs("mesh", {
+          position: [side * -0.014, 0.026, -0.04],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.014, 6, 6] }),
+            J.jsx("meshBasicMaterial", { color: "#ffffff" })
+          ]
+        }, "c"),
+        // upper lash line
+        J.jsxs("mesh", {
+          position: [0, 0.062, -0.026],
+          rotation: [0, 0, side * -0.2],
+          children: [
+            J.jsx("boxGeometry", { args: [0.115, 0.019, 0.012] }),
+            J.jsx("meshStandardMaterial", { color: hair, roughness: 0.7 })
+          ]
+        }, "l")
+      ] }, side);
+    };
+    return J.jsxs("group", { children: [
+      eye(-1),
+      eye(1),
+      // brows
+      J.jsxs("mesh", {
+        position: [-0.118, 2.088, -0.302],
+        rotation: [0, 0, 0.16],
+        children: [
+          J.jsx("boxGeometry", { args: [0.1, 0.02, 0.014] }),
+          J.jsx("meshStandardMaterial", { color: hair, roughness: 0.75 })
+        ]
+      }, "bl"),
+      J.jsxs("mesh", {
+        position: [0.118, 2.088, -0.302],
+        rotation: [0, 0, -0.16],
+        children: [
+          J.jsx("boxGeometry", { args: [0.1, 0.02, 0.014] }),
+          J.jsx("meshStandardMaterial", { color: hair, roughness: 0.75 })
+        ]
+      }, "br"),
+      // nose
+      J.jsxs("mesh", {
+        position: [0, 1.925, -0.328],
+        scale: [0.05, 0.07, 0.045],
+        children: [
+          J.jsx("sphereGeometry", { args: [1, 8, 6] }),
+          J.jsx("meshStandardMaterial", { color: "#c08a76", roughness: 0.72 })
+        ]
+      }, "n"),
+      // mouth
+      J.jsxs("mesh", {
+        position: [0, 1.868, -0.318],
+        children: [
+          J.jsx("boxGeometry", { args: [0.055, 0.012, 0.01] }),
+          J.jsx("meshStandardMaterial", { color: "#9c5e58", roughness: 0.7 })
+        ]
+      }, "m")
+    ] });
+  }
+
+  // ---------------------------------------------------------------- outfit
+  // NOT MOUNTED. Kept for reference: at the shipped camera distance these
+  // layers read as clutter on a body this small rather than as tailoring, so
+  // the release only installs Hair and Face.
+  function Outfit(props) {
+    var visual = props.visual;
+    var skirt = R.useRef(null);
+    useFrame(function (state) {
+      if (!skirt.current) return;
+      var t = state.clock.elapsedTime;
+      var kids = skirt.current.children;
+      for (var i = 0; i < kids.length; i++) {
+        kids[i].rotation.x = kids[i].userData.rx + Math.sin(t * 2.1 + i * 0.9) * 0.055;
+      }
+    });
+
+    var panels = [];
+    var n = 7;
+    for (var i = 0; i < n; i++) {
+      var a = (i / n) * Math.PI * 2 + Math.PI / n;
+      var rx = 0.12;
+      panels.push(
+        J.jsxs("mesh", {
+          position: [Math.sin(a) * 0.215, -0.14, Math.cos(a) * 0.185],
+          rotation: [rx, a, 0],
+          userData: { rx: rx },
+          castShadow: true,
+          children: [
+            J.jsx("boxGeometry", { args: [0.17, 0.33, 0.025] }),
+            J.jsx("meshStandardMaterial", {
+              color: visual.cloak,
+              emissive: visual.color,
+              emissiveIntensity: 0.16,
+              roughness: 0.6,
+              metalness: 0.12
+            })
+          ]
+        }, i)
+      );
+    }
+
+    return J.jsxs("group", { children: [
+      // standing collar
+      J.jsxs("mesh", {
+        position: [0, 1.63, -0.02],
+        rotation: [0.16, 0, 0],
+        children: [
+          J.jsx("cylinderGeometry", { args: [0.28, 0.23, 0.3, 12, 1, true] }),
+          J.jsx("meshStandardMaterial", {
+            color: visual.cloak,
+            emissive: visual.color,
+            emissiveIntensity: 0.3,
+            roughness: 0.5,
+            metalness: 0.28,
+            side: 2
+          })
+        ]
+      }, "collar"),
+      // chest emblem
+      J.jsxs("mesh", {
+        position: [0, 1.36, -0.28],
+        rotation: [0, 0, Math.PI * 0.25],
+        children: [
+          J.jsx("boxGeometry", { args: [0.085, 0.085, 0.025] }),
+          J.jsx("meshStandardMaterial", {
+            color: visual.color,
+            emissive: visual.glow,
+            emissiveIntensity: 1.7,
+            metalness: 0.8,
+            roughness: 0.15
+          })
+        ]
+      }, "emblem"),
+      // coat skirt
+      J.jsxs("group", { ref: skirt, position: [0, 0.93, 0], children: panels }, "skirt"),
+      // thigh straps
+      J.jsxs("mesh", {
+        position: [-0.18, 0.62, 0.02],
+        rotation: [Math.PI / 2, 0, 0],
+        children: [
+          J.jsx("torusGeometry", { args: [0.135, 0.022, 5, 12] }),
+          J.jsx("meshStandardMaterial", { color: "#3a2b20", roughness: 0.8 })
+        ]
+      }, "stl"),
+      J.jsxs("mesh", {
+        position: [0.18, 0.62, 0.02],
+        rotation: [Math.PI / 2, 0, 0],
+        children: [
+          J.jsx("torusGeometry", { args: [0.135, 0.022, 5, 12] }),
+          J.jsx("meshStandardMaterial", { color: "#3a2b20", roughness: 0.8 })
+        ]
+      }, "str")
+    ] });
+  }
+
+  // ----------------------------------------------------------------- peers
+  // Other players, fed by cardinal-net.js through window.__cardinalPeers.
+  //
+  // The list refreshes about once a second, but each avatar interpolates
+  // toward its target every frame, so movement reads as walking rather than
+  // teleporting. Kept deliberately light -- five meshes and one label each --
+  // because a lobby holds up to 50.
+  function Cursor(props) {
+    // The SAO colour cursor: green normal, orange criminal, red killer.
+    var pk = props.pk;
+    var tone = pk === "red" ? "#f0554f" : pk === "orange" ? "#f0a24a" : "#58d98f";
+    var ref = R.useRef(null);
+    useFrame(function (state) {
+      if (ref.current) {
+        ref.current.position.y = props.y + Math.sin(state.clock.elapsedTime * 2 + props.phase) * 0.05;
+        ref.current.rotation.y = state.clock.elapsedTime * 0.9;
+      }
+    });
+    return J.jsxs("group", { ref: ref, position: [0, props.y, 0], children: [
+      J.jsxs("mesh", {
+        rotation: [Math.PI, 0, 0],
+        children: [
+          J.jsx("coneGeometry", { args: [0.16, 0.3, 4] }),
+          J.jsx("meshStandardMaterial", {
+            color: tone, emissive: tone, emissiveIntensity: 2.2,
+            roughness: 0.25, metalness: 0.1, toneMapped: false
+          })
+        ]
+      }, "c"),
+      J.jsxs("mesh", {
+        position: [0, 0.17, 0],
+        rotation: [Math.PI / 2, 0, 0],
+        children: [
+          J.jsx("ringGeometry", { args: [0.19, 0.23, 16] }),
+          J.jsx("meshBasicMaterial", { color: tone, transparent: true, opacity: 0.5, side: 2 })
+        ]
+      }, "r")
+    ] });
+  }
+
+  function Peer(props) {
+    var peer = props.peer;
+    var visual = props.visual;
+    var Label = props.label;
+    var female = peer.gender === "female";
+    var tex = female ? props.texF : props.texM;
+    var hairTone = female ? "#26344d" : "#26202a";
+
+    var root = R.useRef(null);
+    var body = R.useRef(null);
+    var legL = R.useRef(null);
+    var legR = R.useRef(null);
+    var armL = R.useRef(null);
+    var armR = R.useRef(null);
+    var cape = R.useRef(null);
+    var placed = R.useRef(false);
+    var gait = R.useRef(0);
+
+    useFrame(function (state, delta) {
+      var g = root.current;
+      if (!g) return;
+      var live = (window.__cardinalPeers && window.__cardinalPeers.list) || [];
+      var target = null;
+      for (var i = 0; i < live.length; i++) {
+        if (live[i].id === peer.id) { target = live[i]; break; }
+      }
+      if (!target) return;
+
+      if (!placed.current) {
+        g.position.x = target.x; g.position.z = target.z; g.rotation.y = target.yaw;
+        placed.current = true;
+      } else {
+        var k = 1 - Math.pow(0.0016, delta);
+        g.position.x += (target.x - g.position.x) * k;
+        g.position.z += (target.z - g.position.z) * k;
+        var d = target.yaw - g.rotation.y;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        g.rotation.y += d * k;
+      }
+
+      // Walk cycle driven by the reported moving flag, matching the swing the
+      // local avatar uses so a remote player does not read as a different
+      // species when they walk past.
+      gait.current += delta * (target.moving ? 10.4 : 1.8);
+      var sw = Math.sin(gait.current);
+      var amp = target.moving ? sw * 0.54 : sw * 0.055;
+      if (body.current) body.current.position.y = target.moving ? Math.abs(sw) * 0.045 : sw * 0.025;
+      if (legL.current) legL.current.rotation.x = -amp * 0.76;
+      if (legR.current) legR.current.rotation.x = amp * 0.76;
+      if (armL.current) armL.current.rotation.x = 0.05 + amp * 0.72;
+      if (armR.current) armR.current.rotation.x = -0.05 - amp * 0.72;
+      if (cape.current) cape.current.rotation.x = 0.15 + amp * 0.13;
+    });
+
+    function limb(ref, x, tone) {
+      return J.jsxs("group", { ref: ref, position: [x, 0.48, 0.02], children: [
+        J.jsxs("mesh", { castShadow: true, children: [
+          J.jsx("capsuleGeometry", { args: [0.17, 0.5, 4, 7] }),
+          J.jsx("meshStandardMaterial", { color: "#263247", roughness: 0.64, metalness: 0.2 })
+        ] }, "l"),
+        J.jsxs("mesh", { position: [0, -0.34, -0.05], children: [
+          J.jsx("boxGeometry", { args: [0.26, 0.16, 0.44] }),
+          J.jsx("meshStandardMaterial", { color: "#171f2e", roughness: 0.6, metalness: 0.3 })
+        ] }, "b")
+      ] }, tone);
+    }
+
+    function arm(ref, x, flip) {
+      return J.jsxs("group", { ref: ref, position: [x, 1.26, 0], rotation: [0, 0, flip * 0.14], children: [
+        J.jsxs("mesh", { castShadow: true, scale: [0.13, 0.52, 0.14], children: [
+          J.jsx("capsuleGeometry", { args: [0.42, 0.45, 4, 7] }),
+          J.jsx("meshStandardMaterial", { color: visual.cloak, roughness: 0.56, metalness: 0.2 })
+        ] }, "a"),
+        J.jsxs("mesh", { position: [0, -0.36, -0.02], children: [
+          J.jsx("sphereGeometry", { args: [0.12, 8, 7] }),
+          J.jsx("meshStandardMaterial", { color: female ? "#e8bca9" : "#d7a98d", roughness: 0.69 })
+        ] }, "h")
+      ] }, flip);
+    }
+
+    return J.jsxs("group", { ref: root, children: [
+      J.jsxs("mesh", {
+        position: [0, 0.03, 0.06], rotation: [-Math.PI / 2, 0, 0], scale: [1.14, 0.74, 1],
+        children: [
+          J.jsx("circleGeometry", { args: [0.66, 18] }),
+          J.jsx("meshBasicMaterial", { color: "#020816", transparent: true, opacity: 0.4, depthWrite: false })
+        ]
+      }, "sh"),
+      J.jsxs("group", { ref: body, children: [
+        limb(legL, -0.17, "ll"),
+        limb(legR, 0.17, "lr"),
+        // torso
+        J.jsxs("mesh", {
+          castShadow: true, position: [0, 1.12, 0],
+          scale: female ? [0.55, 1.22, 0.47] : [0.6, 1.2, 0.5],
+          children: [
+            J.jsx("capsuleGeometry", { args: [0.4, 0.8, 5, 9] }),
+            J.jsx("meshStandardMaterial", {
+              color: visual.cloak, emissive: visual.color, emissiveIntensity: 0.17,
+              roughness: 0.45, metalness: 0.27
+            })
+          ]
+        }, "torso"),
+        // belt
+        J.jsxs("mesh", {
+          position: [0, 0.93, 0], rotation: [Math.PI / 2, 0, 0], scale: [1.1, 0.78, 1],
+          children: [
+            J.jsx("torusGeometry", { args: [0.38, 0.05, 5, 14] }),
+            J.jsx("meshStandardMaterial", { color: "#c19a4c", metalness: 0.76, roughness: 0.25 })
+          ]
+        }, "belt"),
+        // shoulder guards
+        J.jsxs("mesh", {
+          castShadow: true, position: [-0.44, 1.45, -0.01], scale: [1.15, 0.78, 0.82],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.22, 9, 7] }),
+            J.jsx("meshStandardMaterial", { color: "#657895", emissive: visual.color,
+                                            emissiveIntensity: 0.16, metalness: 0.64, roughness: 0.28 })
+          ]
+        }, "sl"),
+        J.jsxs("mesh", {
+          castShadow: true, position: [0.44, 1.45, -0.01], scale: [1.15, 0.78, 0.82],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.22, 9, 7] }),
+            J.jsx("meshStandardMaterial", { color: "#657895", emissive: visual.color,
+                                            emissiveIntensity: 0.16, metalness: 0.64, roughness: 0.28 })
+          ]
+        }, "sr"),
+        arm(armL, -0.46, -1),
+        arm(armR, 0.46, 1),
+        // cape
+        J.jsxs("mesh", {
+          ref: cape, castShadow: true, position: [0, 1.16, 0.36],
+          rotation: [0.15, Math.PI, 0], scale: [0.62, 1.18, 1],
+          children: [
+            J.jsx("planeGeometry", { args: [1, 1] }),
+            J.jsx("meshStandardMaterial", {
+              color: visual.cloak, emissive: visual.color, emissiveIntensity: 0.22,
+              transparent: true, opacity: 0.95, side: 2, roughness: 0.58
+            })
+          ]
+        }, "cape"),
+        // head
+        J.jsxs("mesh", {
+          castShadow: true, position: [0, 1.96, 0],
+          children: [
+            J.jsx("sphereGeometry", { args: [0.33, 26, 18] }),
+            J.jsx("meshStandardMaterial", { map: tex, color: "#ffffff", roughness: 0.56 })
+          ]
+        }, "head"),
+        // hair: a light version of the local one -- cap, three bangs, a tail
+        J.jsxs("group", { position: [0, 1.96, 0], children: [
+          J.jsxs("mesh", { castShadow: true, position: [0, 0.21, 0.05], scale: [1.1, 0.84, 1.07], children: [
+            J.jsx("sphereGeometry", { args: [0.335, 14, 11] }),
+            J.jsx("meshStandardMaterial", { color: hairTone, roughness: 0.8 })
+          ] }, "cap"),
+          J.jsxs("mesh", { position: [-0.17, 0.17, -0.25], rotation: [0.3, 0.3, -0.25], children: [
+            J.jsx("boxGeometry", { args: [0.13, 0.3, 0.09] }),
+            J.jsx("meshStandardMaterial", { color: hairTone, roughness: 0.78 })
+          ] }, "b1"),
+          J.jsxs("mesh", { position: [0.02, 0.19, -0.27], rotation: [0.3, 0, 0.05], children: [
+            J.jsx("boxGeometry", { args: [0.14, 0.31, 0.09] }),
+            J.jsx("meshStandardMaterial", { color: hairTone, roughness: 0.78 })
+          ] }, "b2"),
+          J.jsxs("mesh", { position: [0.2, 0.17, -0.24], rotation: [0.3, -0.3, 0.28], children: [
+            J.jsx("boxGeometry", { args: [0.13, 0.3, 0.09] }),
+            J.jsx("meshStandardMaterial", { color: hairTone, roughness: 0.78 })
+          ] }, "b3"),
+          J.jsxs("mesh", {
+            position: [0, female ? 0.02 : 0.12, female ? 0.34 : 0.28],
+            rotation: [female ? 2.75 : 2.9, 0, 0],
+            children: [
+              J.jsx("coneGeometry", { args: [female ? 0.15 : 0.11, female ? 0.62 : 0.32, 5] }),
+              J.jsx("meshStandardMaterial", { color: hairTone, roughness: 0.78 })
+            ]
+          }, "tail")
+        ] }, "hair")
+      ] }, "body"),
+      J.jsx(Cursor, { pk: peer.pkStatus, y: 2.62, phase: (peer.id % 10) * 0.7 }, "cur"),
+      Label
+        ? J.jsx(Label, {
+            center: true, distanceFactor: 11, position: [0, 3.1, 0],
+            style: { pointerEvents: "none", whiteSpace: "nowrap" },
+            children: J.jsxs("div", {
+              className: "avatar-label avatar-label--peer avatar-label--" + (peer.pkStatus || "white"),
+              children: [J.jsx("span", { children: visual.crest }), peer.name]
+            })
+          }, "lb")
+        : null
+    ] });
+  }
+
+  function Peers(props) {
+    var palette = props.colours;
+    var Label = props.label;
+    var max = props.max || 20;
+    var state0 = R.useState([]);
+    var list = state0[0];
+    var setList = state0[1];
+
+    R.useEffect(function () {
+      var stop = false;
+      function tick() {
+        if (stop) return;
+        var live = (window.__cardinalPeers && window.__cardinalPeers.list) || [];
+        var next = live.slice(0, max).map(function (p) {
+          return { id: p.id, name: p.name, classId: p.classId, pkStatus: p.pkStatus,
+                   gender: p.gender === "female" ? "female" : "male" };
+        });
+        setList(function (prev) {
+          // only re-render when the roster itself changes; positions are
+          // interpolated per frame and must not churn React
+          if (prev.length === next.length) {
+            var same = true;
+            for (var i = 0; i < prev.length; i++) {
+              if (prev[i].id !== next[i].id || prev[i].pkStatus !== next[i].pkStatus
+                  || prev[i].gender !== next[i].gender) { same = false; break; }
+            }
+            if (same) return prev;
+          }
+          return next;
+        });
+      }
+      var timer = setInterval(tick, 900);
+      tick();
+      return function () { stop = true; clearInterval(timer); };
+    }, [max]);
+
+    var items = [];
+    for (var i = 0; i < list.length; i++) {
+      var peer = list[i];
+      var visual = palette[peer.classId] || palette[1];
+      items.push(J.jsx(Peer, { peer: peer, texM: props.texM, texF: props.texF,
+                               visual: visual, label: Label }, peer.id));
+    }
+    return J.jsxs("group", { children: items });
+  }
+
+  return { Head: Head, Hair: Hair, Face: Face, Outfit: Outfit, Peers: Peers, Cursor: Cursor };
+}

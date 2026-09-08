@@ -10,19 +10,28 @@
     <title>کاردینال | سرور ۵</title>
     <style>
       html, body, #root { width: 100%; min-height: 100%; margin: 0; }
-      body { background: #071426; color: #eaf3ff; font-family: Tahoma, "Segoe UI", Arial, sans-serif; }
-      .startup { min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: radial-gradient(circle at 48% 35%, #294b82 0, #111f39 36%, #071426 75%); text-align: center; }
-      .startup__card { width: min(390px, 100%); padding: 30px 24px; border: 1px solid rgba(191, 214, 255, .2); border-radius: 22px; background: rgba(12, 25, 47, .84); box-shadow: 0 20px 55px rgba(0, 0, 0, .35); }
-      .startup__mark { display: grid; width: 50px; height: 50px; place-items: center; margin: 0 auto 15px; border: 1px solid #f6d171; border-radius: 14px 14px 21px 14px; background: linear-gradient(135deg, #f6d171, #a66b2c); color: #162035; font: bold 32px Georgia, serif; transform: rotate(-7deg); }
-      .startup h1 { margin: 0 0 8px; font-size: 23px; }.startup p { margin: 0; color: #bdcde5; font-size: 13px; line-height: 1.9; }
-      .startup small { display: block; margin-top: 13px; color: #8394af; font-size: 11px; }
-      .startup__retry { display: inline-block; margin-top: 14px; padding: 8px 12px; border: 1px solid rgba(246, 209, 113, .42); border-radius: 9px; color: #ffe1a0; font: 700 11px Tahoma, "Segoe UI", Arial, sans-serif; text-decoration: none; }
+      body { background: #060d1b; color: #eaf3ff; font-family: Tahoma, "Segoe UI", Arial, sans-serif; }
+      .startup { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #22437c 0, #101f39 38%, #060d1b 78%); text-align: center; }
+      .startup:before { content: ""; position: absolute; inset: -20%; background: radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent), radial-gradient(1.5px 1.5px at 34% 32%, #d3deff 99%, transparent), radial-gradient(1px 1px at 58% 14%, #fff 99%, transparent), radial-gradient(2px 2px at 77% 24%, #dbe7ff 99%, transparent), radial-gradient(1px 1px at 88% 58%, #fff 99%, transparent), radial-gradient(1px 1px at 22% 66%, #fff 99%, transparent); opacity: .55; animation: startup-drift 22s ease-in-out infinite alternate; }
+      .startup__card { position: relative; width: min(390px, 100%); padding: 32px 24px 26px; border: 1px solid rgba(150, 205, 255, .22); border-radius: 22px; background: linear-gradient(148deg, rgba(21, 39, 70, .88), rgba(9, 19, 37, .92)); box-shadow: 0 24px 60px rgba(0, 0, 0, .45), inset 0 1px rgba(255, 255, 255, .07); overflow: hidden; -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+      .startup__aura { position: absolute; inset: -60% -30% auto; height: 180px; background: radial-gradient(ellipse at 50% 0, rgba(111, 214, 255, .3), transparent 62%); pointer-events: none; }
+      .startup__mark { position: relative; display: grid; width: 52px; height: 52px; place-items: center; margin: 0 auto 16px; border: 1px solid #f6d171; border-radius: 14px 14px 21px 14px; background: linear-gradient(135deg, #ffe6a4, #f6c568 42%, #a66b2c); color: #162035; font: bold 33px Georgia, serif; transform: rotate(-7deg); box-shadow: 0 0 26px rgba(246, 197, 104, .3), inset 0 1px rgba(255, 255, 255, .5); }
+      .startup h1 { position: relative; margin: 0 0 8px; font-size: 23px; }
+      .startup p { position: relative; margin: 0; color: #bdcde5; font-size: 13px; line-height: 1.9; }
+      .startup small { position: relative; display: block; margin-top: 14px; color: #8394af; font-size: 11px; }
+      .startup__retry { position: relative; display: inline-block; margin-top: 14px; padding: 8px 12px; border: 1px solid rgba(246, 209, 113, .42); border-radius: 9px; color: #ffe1a0; font: 700 11px Tahoma, "Segoe UI", Arial, sans-serif; text-decoration: none; }
       .startup__retry:hover { background: rgba(246, 197, 104, .13); }
+      .startup__bar { position: relative; width: 178px; height: 3px; margin: 18px auto 0; border-radius: 99px; overflow: hidden; background: rgba(150, 205, 255, .14); }
+      .startup__bar i { position: absolute; top: 0; bottom: 0; width: 42%; border-radius: inherit; background: linear-gradient(90deg, transparent, #6fd6ff, #f6c568, transparent); animation: startup-scan 1.5s ease-in-out infinite; }
       .startup__spin { width: 20px; height: 20px; margin: 16px auto 0; border: 2px solid rgba(255,255,255,.23); border-top-color: #f6d171; border-radius: 50%; animation: spin .8s linear infinite; }
       @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes startup-scan { 0% { left: -45%; } 100% { left: 103%; } }
+      @keyframes startup-drift { to { transform: translate3d(1.5%, -1.5%, 0) scale(1.05); } }
+      @media (prefers-reduced-motion: reduce) { .startup:before, .startup__bar i { animation: none; } .startup__bar i { left: 0; width: 100%; } }
     </style>
-    <script type="module" crossorigin src="./assets/index-ItmggkR1.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Dnm512So.css">
+    <script type="module" crossorigin src="./assets/index-KOklAZGP.js"></script>
+    <script defer src="./assets/cardinal-net-6RkwvLjz.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-vfQVtoo3.css">
     <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
     <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
   </head>
@@ -30,10 +39,11 @@
     <div id="root">
       <main class="startup" aria-live="polite">
         <section class="startup__card">
+          <div class="startup__aura" aria-hidden="true"></div>
           <div class="startup__mark">C</div>
           <h1>کاردینال · سرور ۵</h1>
           <p>در حال آماده‌سازی دروازه‌های جهان کاردینال…</p>
-          <div class="startup__spin" aria-hidden="true"></div>
+          <div class="startup__bar" aria-hidden="true"><i></i></div>
           <small id="startup-status">در حال بارگذاری رابط بازی…</small>
           <a class="startup__retry" href="./?reload=1">بارگذاری دوباره</a>
         </section>
@@ -69,6 +79,6 @@
     </script>
     <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
     <script nomodule crossorigin id="vite-legacy-polyfill" src="./assets/polyfills-legacy-CkLuAc6e.js"></script>
-    <script nomodule crossorigin id="vite-legacy-entry" data-src="./assets/index-legacy-DfcBKWBd.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+    <script nomodule crossorigin id="vite-legacy-entry" data-src="./assets/index-legacy-csgkgzcY.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
   </body>
 </html>

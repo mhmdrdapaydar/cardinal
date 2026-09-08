@@ -1,0 +1,404 @@
+/*
+ * Cardinal — realtime client: presence sync, chat, online roster.
+ * =============================================================================
+ * Loaded by index.html as a plain script, deliberately OUTSIDE the game bundle:
+ * nothing here can break the React tree, and the file can be edited without
+ * rebuilding anything.
+ *
+ * It talks only to realtime.php, which has its own SQLite file and no access to
+ * the game database. It reads api.php?route=me for display identity (name,
+ * class, floor, location, cursor colour) and never writes to it.
+ *
+ * Local position comes for free: the shipped camera controller already publishes
+ * it on the canvas every frame —
+ *     canvas.dataset.cardinalAvatar  = "x,z"
+ *     canvas.dataset.cardinalHeading = "yaw"
+ * so no hook into the render loop is needed.
+ *
+ * Remote players are handed to the 3D layer through window.__cardinalPeers.
+ * If the world chunk never picks them up, chat and the roster still work.
+ */
+(function () {
+  "use strict";
+
+  if (window.__cardinalNet) return;
+
+  var SYNC_MS = 900;         // heartbeat; the server expires a player after 60s
+  var CHAT_MS = 2600;        // chat poll while the window is open
+  var CHAT_IDLE_MS = 9000;   // chat poll while it is collapsed
+  var ME_MS = 20000;         // refresh display identity once we have one
+  var ME_RETRY_MS = 2500;    // while signed out, ask again quickly
+  var MAX_CHARS = 240;
+
+  var base = new URL("realtime.php", location.href).href;
+  var apiBase = new URL("api.php", location.href).href;
+
+  var state = {
+    me: null,
+    peers: [],
+    lobby: 1,
+    lobbies: 1,
+    inRoom: 0,
+    online: 0,
+    lastChatId: 0,
+    messages: [],
+    open: false,
+    unread: 0,
+    available: true,
+    reason: "",
+  };
+  window.__cardinalPeers = { list: [], at: 0, room: null };
+
+  // ------------------------------------------------------------------ fetch
+  function call(route, options) {
+    var url = base + (base.indexOf("?") === -1 ? "?" : "&") + "route=" + route;
+    if (options && options.query) url += "&" + options.query;
+    return fetch(url, {
+      method: options && options.body ? "POST" : "GET",
+      credentials: "same-origin",
+      headers: options && options.body ? { "Content-Type": "application/json" } : undefined,
+      body: options && options.body ? JSON.stringify(options.body) : undefined,
+      cache: "no-store",
+    }).then(function (res) {
+      return res.json().catch(function () {
+        throw new Error("پاسخ سرویس قابل خواندن نبود.");
+      }).then(function (payload) {
+        if (!res.ok || !payload || payload.ok !== true) {
+          var err = new Error((payload && payload.error) || ("خطای " + res.status));
+          err.status = res.status;
+          throw err;
+        }
+        return payload.data;
+      });
+    });
+  }
+
+  function readMe() {
+    return fetch(apiBase + "?route=me", { credentials: "same-origin", cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        if (!p || p.ok !== true || !p.data || !p.data.player) return null;
+        var pl = p.data.player;
+        return {
+          id: pl.id,
+          name: pl.name || "بازیکن",
+          classId: Number(pl.classId) || 1,
+          pkStatus: pl.pkStatus || "white",
+          gender: pl.gender === "female" ? "female" : "male",
+          floor: Number(pl.currentFloor) || 1,
+          location: pl.location === "wild" ? "wild" : "city",
+        };
+      })
+      .catch(function () { return null; });
+  }
+
+  // ------------------------------------------------------- local position
+  function localTransform() {
+    var canvas = document.querySelector(".world canvas");
+    if (!canvas) return null;
+    var raw = canvas.dataset.cardinalAvatar;
+    if (!raw) return null;
+    var parts = raw.split(",");
+    var x = parseFloat(parts[0]);
+    var z = parseFloat(parts[1]);
+    if (!isFinite(x) || !isFinite(z)) return null;
+    var yaw = parseFloat(canvas.dataset.cardinalHeading);
+    return { x: x, z: z, yaw: isFinite(yaw) ? yaw : 0 };
+  }
+
+  var lastPos = { x: 0, z: 0 };
+  function isMoving(t) {
+    var moved = Math.hypot(t.x - lastPos.x, t.z - lastPos.z) > 0.02;
+    lastPos.x = t.x; lastPos.z = t.z;
+    return moved;
+  }
+
+  // ------------------------------------------------------------------ sync
+  var syncTimer = null;
+  function sync() {
+    if (!state.me || !state.available) return;
+    var t = localTransform();
+    if (!t) return;
+    call("sync", {
+      body: {
+        name: state.me.name,
+        classId: state.me.classId,
+        pkStatus: state.me.pkStatus,
+        gender: state.me.gender,
+        floor: state.me.floor,
+        location: state.me.location,
+        x: t.x, z: t.z, yaw: t.yaw,
+        moving: isMoving(t),
+      },
+    }).then(function (data) {
+      state.peers = data.players || [];
+      state.lobby = data.lobby;
+      state.lobbies = data.lobbies;
+      state.inRoom = data.inRoom;
+      state.online = data.online;
+      window.__cardinalPeers = { list: state.peers, at: performance.now(), room: data.room };
+      renderRoster();
+    }).catch(function (err) {
+      if (err.status === 503) { state.available = false; state.reason = err.message; renderRoster(); }
+    });
+  }
+
+  // ------------------------------------------------------------------ chat
+  // Guarded against the duplicate-message report.
+  //
+  // pollChat is reachable from four places at once -- the interval, opening
+  // the panel, finishing a send, and gaining an identity. Two requests in
+  // flight with the same lastChatId both come back with the same rows and both
+  // used to append them, which is what made a new message repeat several times
+  // for the receiver. An in-flight flag stops the overlap, and the merge
+  // ignores any id already held so even a reordered response cannot duplicate.
+  var chatInFlight = false;
+
+  function mergeMessages(incoming) {
+    var seen = {};
+    var i;
+    for (i = 0; i < state.messages.length; i++) seen[state.messages[i].id] = true;
+    var added = 0;
+    for (i = 0; i < incoming.length; i++) {
+      var m = incoming[i];
+      if (seen[m.id]) continue;
+      seen[m.id] = true;
+      state.messages.push(m);
+      added++;
+      if (!state.open && !m.self) state.unread++;
+    }
+    if (!added) return false;
+    state.messages.sort(function (a, b) { return a.id - b.id; });
+    if (state.messages.length > 100) state.messages = state.messages.slice(-100);
+    var top = 0;
+    for (i = 0; i < state.messages.length; i++) if (state.messages[i].id > top) top = state.messages[i].id;
+    state.lastChatId = top;
+    return true;
+  }
+
+  function pollChat() {
+    if (!state.me || !state.available || !inGame() || chatInFlight) return;
+    chatInFlight = true;
+    call("chat", state.lastChatId ? { query: "after=" + state.lastChatId } : null)
+      .then(function (data) {
+        var incoming = data.messages || [];
+        // The server wipes the transcript once the realm empties. If it comes
+        // back with a full page whose ids are all below ours, the table was
+        // reset and our view has to reset with it.
+        if (!state.lastChatId) state.messages = [];
+        else if (incoming.length && incoming[incoming.length - 1].id < state.lastChatId) {
+          state.messages = [];
+          state.lastChatId = 0;
+        }
+        if (mergeMessages(incoming)) renderChat();
+      })
+      .catch(function () {})
+      .then(function () { chatInFlight = false; });
+  }
+
+  function send(body) {
+    if (!state.me) return Promise.reject(new Error("هنوز وارد بازی نشده‌اید."));
+    return call("chat/send", {
+      body: { body: body, name: state.me.name, classId: state.me.classId, pkStatus: state.me.pkStatus },
+    }).then(function () { pollChat(); });
+  }
+
+  // ---------------------------------------------------------------- markup
+  var el = {};
+  function build() {
+    var root = document.createElement("div");
+    root.className = "cnet";
+    root.setAttribute("data-camera-ignore", "");   // keeps camera drag off the panel
+    root.innerHTML =
+      '<button class="cnet__tab" type="button">' +
+        '<span class="cnet__tab-icon">▣</span>' +
+        '<span class="cnet__tab-label">گفتگوی قلمرو</span>' +
+        '<span class="cnet__badge" hidden>0</span>' +
+      '</button>' +
+      '<section class="cnet__panel" hidden>' +
+        '<header class="cnet__head">' +
+          '<span class="cnet__title">گفتگوی قلمرو</span>' +
+          '<span class="cnet__meta"></span>' +
+          '<button class="cnet__close" type="button" aria-label="بستن">✕</button>' +
+        '</header>' +
+        '<div class="cnet__log" role="log"></div>' +
+        '<form class="cnet__form">' +
+          '<input class="cnet__input" type="text" maxlength="' + MAX_CHARS + '" ' +
+                 'placeholder="پیام به همهٔ بازیکنان…" autocomplete="off" />' +
+          '<button class="cnet__send" type="submit">ارسال</button>' +
+        '</form>' +
+        '<small class="cnet__note"></small>' +
+      '</section>';
+    document.body.appendChild(root);
+
+    el.root = root;
+    el.tab = root.querySelector(".cnet__tab");
+    el.badge = root.querySelector(".cnet__badge");
+    el.panel = root.querySelector(".cnet__panel");
+    el.meta = root.querySelector(".cnet__meta");
+    el.log = root.querySelector(".cnet__log");
+    el.form = root.querySelector(".cnet__form");
+    el.input = root.querySelector(".cnet__input");
+    el.note = root.querySelector(".cnet__note");
+
+    el.tab.addEventListener("click", function () { toggle(true); });
+    root.querySelector(".cnet__close").addEventListener("click", function () { toggle(false); });
+    el.form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var text = el.input.value.trim();
+      if (!text) return;
+      el.input.value = "";
+      el.note.textContent = "";
+      send(text).catch(function (err) { el.note.textContent = err.message; });
+    });
+    // Movement keys are captured globally; do not let them leak while typing.
+    el.input.addEventListener("keydown", function (e) { e.stopPropagation(); });
+  }
+
+  function toggle(open) {
+    state.open = open;
+    el.panel.hidden = !open;
+    el.tab.hidden = open;
+    if (open) {
+      state.unread = 0;
+      el.badge.hidden = true;
+      pollChat();
+      el.log.scrollTop = el.log.scrollHeight;
+      el.input.focus();
+    }
+  }
+
+  function cursorClass(pk) {
+    if (pk === "orange") return "cnet--orange";
+    if (pk === "red") return "cnet--red";
+    return "cnet--green";
+  }
+
+  function renderChat() {
+    if (!el.log) return;
+    var stuck = el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight < 40;
+    var html = "";
+    for (var i = 0; i < state.messages.length; i++) {
+      var m = state.messages[i];
+      var when = new Date(m.at * 1000);
+      html +=
+        '<p class="cnet__line' + (m.self ? " cnet__line--self" : "") + '">' +
+          '<i class="cnet__dot ' + cursorClass(m.pkStatus) + '"></i>' +
+          '<b>' + escapeHtml(m.name) + '</b>' +
+          '<span>' + escapeHtml(m.body) + '</span>' +
+          '<time>' + String(when.getHours()).padStart(2, "0") + ":" +
+                     String(when.getMinutes()).padStart(2, "0") + '</time>' +
+        '</p>';
+    }
+    el.log.innerHTML = html || '<p class="cnet__empty">هنوز پیامی نیست. اولین نفر باشید.</p>';
+    if (stuck) el.log.scrollTop = el.log.scrollHeight;
+    if (state.unread > 0) { el.badge.hidden = false; el.badge.textContent = String(state.unread); }
+  }
+
+  function renderRoster() {
+    if (!el.meta) return;
+    if (!state.available) {
+      el.meta.textContent = "آفلاین";
+      el.note.textContent = state.reason;
+      return;
+    }
+    el.meta.textContent =
+      state.inRoom + " نفر اینجا · لابی " + state.lobby + " از " + state.lobbies +
+      " · " + state.online + " آنلاین";
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ------------------------------------------------------------------ boot
+  //
+  // Identity is NOT read once. The script can load while the login screen is
+  // still up, in which case api.php?route=me has no player yet; a single
+  // attempt would leave the panel permanently without an identity and every
+  // send would fail. So it keeps asking until it gets one, and keeps checking
+  // afterwards so a logout is noticed too.
+  var identityTimer = null;
+
+  function applyIdentity(me) {
+    var had = !!state.me;
+    state.me = me;
+    if (me && !had) {
+      sync();
+      pollChat();
+      if (!syncTimer) syncTimer = setInterval(sync, SYNC_MS);
+    }
+    if (!me && had) {
+      // signed out: drop the session view so nothing is posted as a ghost
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      state.peers = [];
+      window.__cardinalPeers = { list: [], at: performance.now(), room: null };
+    }
+    updateVisibility();
+  }
+
+  // Poll fast while there is no identity -- the script can load on the login
+  // screen, and the player may sign in at any moment -- then back off once one
+  // is in hand.
+  function chaseIdentity() {
+    readMe().then(applyIdentity).catch(function () { applyIdentity(null); }).then(scheduleIdentity);
+  }
+
+  function scheduleIdentity() {
+    if (identityTimer) clearTimeout(identityTimer);
+    identityTimer = setTimeout(chaseIdentity, state.me ? ME_MS : ME_RETRY_MS);
+  }
+
+  // The panel belongs to the game, not to the landing page: it only appears
+  // once the shell is mounted and an identity exists.
+  function inGame() {
+    return !!document.querySelector(".game-shell") && !!state.me;
+  }
+
+  var sawShell = false;
+  function updateVisibility() {
+    if (!el.root) return;
+    var shell = !!document.querySelector(".game-shell");
+    // The moment the shell appears, ask for an identity right away instead of
+    // waiting for the next retry tick, so chat is usable as soon as the player
+    // is in the world.
+    if (shell && !sawShell) { sawShell = true; if (!state.me) chaseIdentity(); }
+    if (!shell) sawShell = false;
+
+    var show = shell && !!state.me;
+    el.root.classList.toggle("cnet--ready", show);
+    if (!show && state.open) toggle(false);
+  }
+
+  function start() {
+    build();
+    renderChat();
+    renderRoster();
+    updateVisibility();
+
+    chaseIdentity();
+    // The shell mounts after the bundle boots and unmounts on logout, so watch
+    // for it rather than assuming it is there.
+    setInterval(updateVisibility, 1200);
+
+    setInterval(function () { pollChat(); }, CHAT_MS);
+
+    // Stop the heartbeat while the tab is hidden; the server expires us after
+    // 60s and other players stop seeing a ghost standing still.
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      } else if (!syncTimer && state.me) {
+        sync();
+        syncTimer = setInterval(sync, SYNC_MS);
+      }
+    });
+  }
+
+  window.__cardinalNet = { state: state, sync: sync, send: send, toggle: toggle };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
+})();

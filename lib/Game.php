@@ -576,8 +576,13 @@ final class CardinalGame
     /** @return array<string, mixed> */
     public function getInventory(int $playerId): array
     {
+        // Reading the backpack is deliberately allowed outside the city.
+        // equip(), unequip() and getEquipment() have never had a location
+        // guard, so gating only this read made the equipment panel fail in the
+        // wild: it loads equipment and inventory together and rendered its
+        // error state when either call was refused. This is a read-only query
+        // and changes no rule, cost, reward or progression value.
         $player = $this->readPlayer($playerId);
-        $this->requireCity($player);
         $items = $this->rows(
             "SELECT inv.quantity, i.item_id, i.item_name, i.description, i.type_id, i.price_coins,
                     COALESCE(t.type_name, '') AS type_name,
@@ -589,9 +594,9 @@ final class CardinalGame
              WHERE inv.player_id = ? AND inv.item_id != 4 ORDER BY i.type_id, i.item_name",
             [$playerId]
         );
-        $miniItems = $this->rows('SELECT mii.mini_item_id, mii.quantity, mi.name, mi.description FROM mini_item_inventory mii JOIN mini_items mi ON mi.mini_item_id = mii.mini_item_id WHERE mii.player_id = ? AND mii.quantity > 0 ORDER BY mi.name', [$playerId]);
+        $miniItems = $this->rows('SELECT mii.mini_item_id, mii.quantity, mi.name, mi.description, mi.price_coins FROM mini_item_inventory mii JOIN mini_items mi ON mi.mini_item_id = mii.mini_item_id WHERE mii.player_id = ? AND mii.quantity > 0 ORDER BY mi.name', [$playerId]);
         $crafted = $this->rows(
-            "SELECT pci.instance_id, pci.craft_item_id, pci.current_power, pci.upgrade_level, ci.item_type, ci.item_name, ci.is_tradeable, ci.is_upgradeable,
+            "SELECT pci.instance_id, pci.craft_item_id, pci.current_power, pci.upgrade_level, ci.item_type, ci.item_name, ci.is_tradeable, ci.is_upgradeable, ci.base_price, ci.price_type,
                     CASE WHEN e.player_id IS NULL THEN FALSE ELSE TRUE END AS equipped
              FROM player_crafted_items pci JOIN craftable_items ci ON ci.craft_item_id = pci.craft_item_id
              LEFT JOIN equipment e ON e.player_id = pci.owner_player_id
@@ -602,8 +607,8 @@ final class CardinalGame
         return [
             'player' => $this->publicPlayer($player),
             'items' => array_map(function (array $row): array { return ['itemId' => self::integer($row['item_id']), 'itemName' => self::text($row['item_name']), 'description' => $row['description'] === null ? null : self::text($row['description']), 'typeId' => self::integer($row['type_id']), 'typeName' => self::text($row['type_name']), 'quantity' => self::integer($row['quantity']), 'priceCoins' => $row['price_coins'] === null ? null : self::integer($row['price_coins']), 'equipped' => self::boolValue($row['equipped'])]; }, $items),
-            'miniItems' => array_map(function (array $row): array { return ['miniItemId' => self::integer($row['mini_item_id']), 'name' => self::text($row['name']), 'description' => $row['description'] === null ? null : self::text($row['description']), 'quantity' => self::integer($row['quantity'])]; }, $miniItems),
-            'craftedItems' => array_map(function (array $row): array { return ['instanceId' => self::integer($row['instance_id']), 'craftItemId' => self::integer($row['craft_item_id']), 'itemType' => self::text($row['item_type']), 'itemName' => self::text($row['item_name']), 'currentPower' => self::integer($row['current_power']), 'upgradeLevel' => self::integer($row['upgrade_level']), 'isTradeable' => self::boolValue($row['is_tradeable']), 'isUpgradeable' => self::boolValue($row['is_upgradeable']), 'equipped' => self::boolValue($row['equipped'])]; }, $crafted),
+            'miniItems' => array_map(function (array $row): array { return ['miniItemId' => self::integer($row['mini_item_id']), 'name' => self::text($row['name']), 'description' => $row['description'] === null ? null : self::text($row['description']), 'quantity' => self::integer($row['quantity']), 'priceCoins' => $row['price_coins'] === null ? null : self::integer($row['price_coins'])]; }, $miniItems),
+            'craftedItems' => array_map(function (array $row): array { return ['instanceId' => self::integer($row['instance_id']), 'craftItemId' => self::integer($row['craft_item_id']), 'itemType' => self::text($row['item_type']), 'itemName' => self::text($row['item_name']), 'currentPower' => self::integer($row['current_power']), 'upgradeLevel' => self::integer($row['upgrade_level']), 'isTradeable' => self::boolValue($row['is_tradeable']), 'isUpgradeable' => self::boolValue($row['is_upgradeable']), 'basePrice' => $row['base_price'] === null ? null : self::integer($row['base_price']), 'priceType' => self::text($row['price_type'] ?? 'coins'), 'equipped' => self::boolValue($row['equipped'])]; }, $crafted),
         ];
     }
 
@@ -1239,6 +1244,8 @@ final class CardinalGame
             case 'exit-city': return $this->exitCity($playerId);
             case 'return-city': return $this->returnCity($playerId, false);
             case 'force-return-city': return $this->returnCity($playerId, true);
+            case 'use-floor-crystal': return $this->useFloorCrystal($playerId);
+            case 'use-return-lock': return $this->useReturnLock($playerId);
             case 'teleport': return $this->teleport($playerId, $payload['floor'] ?? null);
             case 'hunt': return $this->hunt($playerId);
             case 'dungeon': return $this->dungeon($playerId);
@@ -1249,6 +1256,8 @@ final class CardinalGame
             case 'buy-item': return $this->buyItem($playerId, $payload['itemId'] ?? null);
             case 'buy-crafted': return $this->buyCrafted($playerId, $payload['craftItemId'] ?? null);
             case 'sell-item': return $this->sellItem($playerId, $payload['itemId'] ?? null);
+            case 'sell-mini': return $this->sellMini($playerId, $payload['miniItemId'] ?? null);
+            case 'sell-crafted': return $this->sellCrafted($playerId, $payload['instanceId'] ?? null);
             case 'equip': return $this->equip($playerId, $payload['slot'] ?? null, $payload['itemId'] ?? null, $payload['instanceId'] ?? null);
             case 'unequip': return $this->unequip($playerId);
             case 'summon-pet': return $this->summonPet($playerId, $payload['itemId'] ?? null);
@@ -1259,6 +1268,7 @@ final class CardinalGame
             case 'transfer-crafted': return $this->transferCrafted($playerId, $payload['targetId'] ?? null, $payload['instanceId'] ?? null);
             case 'drop-item': return $this->dropItem($playerId, $payload['itemId'] ?? null, $payload['quantity'] ?? null);
             case 'drop-mini': return $this->dropMini($playerId, $payload['miniItemId'] ?? null, $payload['quantity'] ?? null);
+            case 'drop-crafted': return $this->dropCrafted($playerId, $payload['instanceId'] ?? null);
             case 'accept-daily': return $this->acceptDailyQuest($playerId, $payload['questId'] ?? null);
             case 'create-party': return $this->createParty($playerId);
             case 'create-team-pvp': return $this->createTeamPvp($playerId, $payload['targetId'] ?? null);
@@ -1342,10 +1352,84 @@ final class CardinalGame
                 $minutes = max(0, (int) floor(($cityCooldown->getTimestamp() - self::now()->getTimestamp()) / 60));
                 throw new GameException('مسیر بازگشت هنوز ' . (int) floor($minutes / 60) . ' ساعت و ' . ($minutes % 60) . ' دقیقه باقی مانده است. برای بازگشت فوری، کریستال اجباری با هزینه ' . $forcedCost . 'C استفاده کنید.');
             }
-            $fee = $forced ? $forcedCost : ($this->isNoble($player) ? 0 : self::integer($player['current_floor']) * 400);
+            // The bot charges current_floor * 50 to walk back in, and twice that
+            // for the forced crystal. The web release had 400 here, eight times
+            // the shared rule.
+            $fee = $forced ? $forcedCost : ($this->isNoble($player) ? 0 : self::integer($player['current_floor']) * 50);
             if (self::integer($player['coins']) < $fee) throw new GameException('موجودی سکه کافی نیست؛ هزینه بازگشت ' . $fee . 'C است.');
             $this->execute("UPDATE players SET current_location = 'city', coins = coins - ?, city_entry_cooldown_until = ? WHERE player_id = ?", [$fee, $forced ? null : ($player['city_entry_cooldown_until'] ?? null), $playerId]);
             return self::event('success', $forced ? 'کریستال تلپورت فعال شد' : 'ورود به منطقه امن', 'به شهر طبقه ' . self::integer($player['current_floor']) . ' بازگشتید.', ['rewards' => ['coins' => -$fee]]);
+        });
+    }
+
+    /**
+     * Floor teleport crystal (item 3).
+     *
+     * Ported from rubika.py: usable only while the walk back to the city is
+     * still on cooldown, sends the player to a random unlocked floor and a
+     * random side of the gate, clears the cooldown and consumes one crystal.
+     * Nothing is refunded and no fee is charged.
+     *
+     * @return array<string, mixed>
+     */
+    private function useFloorCrystal(int $playerId): array
+    {
+        return $this->transaction(function () use ($playerId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $cooldown = self::dateValue($player['city_entry_cooldown_until'] ?? null);
+            if (!$cooldown || $cooldown <= self::now()) {
+                throw new GameException('در حال حاضر نیازی به کریستال تلپورت طبقات ندارید؛ می‌توانید به‌صورت عادی به شهر بازگردید.');
+            }
+            $owned = $this->one('SELECT quantity FROM inventory WHERE player_id = ? AND item_id = 3 AND quantity > 0', [$playerId]);
+            if (!$owned) throw new GameException('کریستال تلپورت طبقات در کوله‌پشتی شما موجود نیست.');
+
+            $maxFloor = max(1, self::integer($player['last_floor_unlocked']));
+            $newFloor = 1 + (int) floor(self::random() * $maxFloor);
+            if ($newFloor > $maxFloor) $newFloor = $maxFloor;
+            $newLocation = self::random() < 0.5 ? 'city' : 'wild';
+
+            $this->execute(
+                'UPDATE players SET current_floor = ?, current_location = ?, city_entry_cooldown_until = NULL WHERE player_id = ?',
+                [$newFloor, $newLocation, $playerId]
+            );
+            $this->execute('UPDATE inventory SET quantity = quantity - 1 WHERE player_id = ? AND item_id = 3', [$playerId]);
+            $this->execute('DELETE FROM inventory WHERE player_id = ? AND item_id = 3 AND quantity <= 0', [$playerId]);
+            // The web build binds party lobbies to a floor, which the bot has no
+            // equivalent of; leaving one behind on the old floor would strand it.
+            $this->removeWrongFloorLobbies($playerId, $newFloor);
+
+            $where = $newLocation === 'city' ? 'داخل شهر' : 'بیرون از شهر';
+            return self::event('success', 'کریستال تلپورت طبقات فعال شد',
+                'فضا پیچ خورد و شما به طبقه ' . $newFloor . ' (' . $where . ') منتقل شدید.');
+        });
+    }
+
+    /**
+     * Quick-return lock (item 15).
+     *
+     * Ported from rubika.py: usable only during the cooldown, puts the player
+     * straight inside the city of the floor they are already on, free of
+     * charge, and consumes one lock.
+     *
+     * @return array<string, mixed>
+     */
+    private function useReturnLock(int $playerId): array
+    {
+        return $this->transaction(function () use ($playerId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $cooldown = self::dateValue($player['city_entry_cooldown_until'] ?? null);
+            if (!$cooldown || $cooldown <= self::now()) {
+                throw new GameException('در حال حاضر نیازی به قفل بازگشت سریع ندارید؛ می‌توانید به‌صورت عادی به شهر بازگردید.');
+            }
+            $owned = $this->one('SELECT quantity FROM inventory WHERE player_id = ? AND item_id = 15 AND quantity > 0', [$playerId]);
+            if (!$owned) throw new GameException('قفل بازگشت سریع در کوله‌پشتی شما موجود نیست.');
+
+            $this->execute("UPDATE players SET current_location = 'city', city_entry_cooldown_until = NULL WHERE player_id = ?", [$playerId]);
+            $this->execute('UPDATE inventory SET quantity = quantity - 1 WHERE player_id = ? AND item_id = 15', [$playerId]);
+            $this->execute('DELETE FROM inventory WHERE player_id = ? AND item_id = 15 AND quantity <= 0', [$playerId]);
+
+            return self::event('success', 'قفل بازگشت سریع فعال شد',
+                'بدون پرداخت عوارض، وارد شهر طبقه ' . self::integer($player['current_floor']) . ' شدید.');
         });
     }
 
@@ -1613,7 +1697,7 @@ final class CardinalGame
             if (!$this->hasInventorySpace($player)) throw new GameException('ظرفیت کوله‌پشتی شما پر است.');
             $price = self::integer($item['price_coins']);
             if (($player['class_name'] ?? '') === 'Blacksmith') $price = (int) floor($price * 0.8);
-            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.95);
+            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.75);
             if (self::integer($player['coins']) < $price) throw new GameException('سکه کافی نیست؛ به ' . $price . 'C نیاز دارید.');
             $this->execute('UPDATE players SET coins = coins - ? WHERE player_id = ?', [$price, $playerId]);
             $this->addInventory($playerId, $itemId);
@@ -1638,7 +1722,7 @@ final class CardinalGame
             }
             $price = self::integer($craft['base_price']);
             if (($player['class_name'] ?? '') === 'Blacksmith') $price = (int) floor($price * 0.8);
-            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.95);
+            elseif (($player['class_name'] ?? '') === 'Merchant') $price = (int) floor($price * 0.75);
             if (self::integer($player['coins']) < $price) throw new GameException('سکه کافی نیست؛ به ' . $price . 'C نیاز دارید.');
             $this->execute('UPDATE players SET coins = coins - ? WHERE player_id = ?', [$price, $playerId]);
             $this->execute('INSERT INTO player_crafted_items (craft_item_id, owner_player_id, current_power, upgrade_level) VALUES (?, ?, ?, 0)', [$craftItemId, $playerId, self::num($craft['base_power'])]);
@@ -1661,6 +1745,65 @@ final class CardinalGame
             $price = !empty($item['price_coins']) ? (int) floor(self::num($item['price_coins']) / 2) : 50;
             $this->execute('UPDATE players SET coins = coins + ? WHERE player_id = ?', [$price, $playerId]);
             return self::event('success', 'فروش موفق', 'یک عدد «' . self::text($item['item_name']) . '» فروخته شد.', ['rewards' => ['coins' => $price]]);
+        });
+    }
+
+    /**
+     * Sell a crafting material.
+     *
+     * rubika.py values materials at a quarter of their listed price, against
+     * a half for ordinary items. Safe zone only, like every other shop action.
+     *
+     * @return array<string, mixed>
+     */
+    private function sellMini(int $playerId, $miniInput): array
+    {
+        $miniItemId = self::assertInt($miniInput, 'شناسه ماده اولیه');
+        return $this->transaction(function () use ($playerId, $miniItemId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $this->requireCity($player);
+            $mini = $this->one('SELECT name, price_coins FROM mini_items WHERE mini_item_id = ?', [$miniItemId]);
+            if (!$mini) throw new GameException('ماده اولیه پیدا نشد.');
+            $this->deductMini($playerId, $miniItemId, 1);
+            $price = (int) floor(self::num($mini['price_coins'] ?? 0) / 4);
+            if ($price > 0) $this->execute('UPDATE players SET coins = coins + ? WHERE player_id = ?', [$price, $playerId]);
+            return self::event('success', 'فروش موفق',
+                'یک عدد «' . self::text($mini['name']) . '» فروخته شد.', ['rewards' => ['coins' => $price]]);
+        });
+    }
+
+    /**
+     * Sell a crafted weapon or armour instance.
+     *
+     * rubika.py pays a quarter of the base price and only accepts instances
+     * that are unequipped, priced in coins and tradeable.
+     *
+     * @return array<string, mixed>
+     */
+    private function sellCrafted(int $playerId, $instanceInput): array
+    {
+        $instanceId = self::assertInt($instanceInput, 'شناسه آیتم ساخته‌شده');
+        return $this->transaction(function () use ($playerId, $instanceId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $this->requireCity($player);
+            $crafted = $this->one(
+                "SELECT pci.instance_id, pci.upgrade_level, ci.item_name, ci.base_price
+                 FROM player_crafted_items pci
+                 JOIN craftable_items ci ON ci.craft_item_id = pci.craft_item_id
+                 WHERE pci.instance_id = ? AND pci.owner_player_id = ?
+                   AND ci.price_type = 'coins' AND ci.is_tradeable = TRUE",
+                [$instanceId, $playerId]
+            );
+            if (!$crafted) throw new GameException('این آیتم ساخته‌شده قابل فروش نیست.');
+            if ($this->one('SELECT player_id FROM equipment WHERE crafted_weapon_instance_id = ? OR crafted_armor_instance_id = ?', [$instanceId, $instanceId])) {
+                throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
+            }
+            $price = (int) floor(self::num($crafted['base_price']) / 4);
+            $this->execute('DELETE FROM player_crafted_items WHERE instance_id = ? AND owner_player_id = ?', [$instanceId, $playerId]);
+            if ($price > 0) $this->execute('UPDATE players SET coins = coins + ? WHERE player_id = ?', [$price, $playerId]);
+            $label = self::text($crafted['item_name']) . ' (+' . self::integer($crafted['upgrade_level']) . ')';
+            return self::event('success', 'فروش موفق',
+                '«' . $label . '» فروخته شد.', ['rewards' => ['coins' => $price]]);
         });
     }
 
@@ -1822,6 +1965,7 @@ final class CardinalGame
         $quantity = self::assertInt($quantityInput, 'تعداد');
         return $this->transaction(function () use ($playerId, $itemId, $quantity): array {
             $player = $this->preparePlayer($playerId, true);
+            // Discarding stays a safe-zone action, as originally shipped.
             $this->requireCity($player);
             if ($itemId === 4) throw new GameException('این آیتم قابل دور انداختن نیست.');
             if ($this->one('SELECT player_id FROM equipment WHERE player_id = ? AND (weapon_id = ? OR armor_id = ? OR pet_id = ?)', [$playerId, $itemId, $itemId, $itemId])) throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
@@ -1844,6 +1988,38 @@ final class CardinalGame
             if (!$mini) throw new GameException('ماده اولیه پیدا نشد.');
             $this->deductMini($playerId, $miniItemId, $quantity);
             return self::event('warning', 'ماده اولیه دور انداخته شد', $quantity . ' عدد «' . self::text($mini['name']) . '» حذف شد.');
+        });
+    }
+
+    /**
+     * Discard a crafted instance permanently.
+     *
+     * The web build could craft and upgrade items but never destroy one, so a
+     * full backpack could not be cleared here. Safe-zone only, like every
+     * other discard. Deletes the caller's own row and refunds nothing.
+     *
+     * @return array<string, mixed>
+     */
+    private function dropCrafted(int $playerId, $instanceInput): array
+    {
+        $instanceId = self::assertInt($instanceInput, 'شناسه آیتم ساخته‌شده');
+        return $this->transaction(function () use ($playerId, $instanceId): array {
+            $player = $this->preparePlayer($playerId, true);
+            $this->requireCity($player);
+            $crafted = $this->one(
+                'SELECT pci.instance_id, pci.upgrade_level, ci.item_name
+                 FROM player_crafted_items pci
+                 JOIN craftable_items ci ON ci.craft_item_id = pci.craft_item_id
+                 WHERE pci.instance_id = ? AND pci.owner_player_id = ?',
+                [$instanceId, $playerId]
+            );
+            if (!$crafted) throw new GameException('این آیتم ساخته‌شده در کوله‌پشتی شما نیست.');
+            if ($this->one('SELECT player_id FROM equipment WHERE crafted_weapon_instance_id = ? OR crafted_armor_instance_id = ?', [$instanceId, $instanceId])) {
+                throw new GameException('ابتدا این آیتم را از تجهیزات خارج کنید.');
+            }
+            $this->execute('DELETE FROM player_crafted_items WHERE instance_id = ? AND owner_player_id = ?', [$instanceId, $playerId]);
+            $label = self::text($crafted['item_name']) . ' (+' . self::integer($crafted['upgrade_level']) . ')';
+            return self::event('warning', 'آیتم ساخته‌شده دور انداخته شد', '«' . $label . '» برای همیشه حذف شد.');
         });
     }
 
